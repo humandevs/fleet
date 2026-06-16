@@ -11,7 +11,11 @@ import useTeamIdParam from "hooks/useTeamIdParam";
 import useGitOpsMode from "hooks/useGitOpsMode";
 import { AppContext } from "context/app";
 import { ignoreAxiosError } from "interfaces/errors";
-import { ISoftwareTitleDetails } from "interfaces/software";
+import {
+  isIpadOrIphoneSoftwareSource,
+  ISoftwareTitleDetails,
+  NO_VERSION_OR_HOST_DATA_SOURCES,
+} from "interfaces/software";
 import {
   APP_CONTEXT_ALL_TEAMS_ID,
   APP_CONTEXT_NO_TEAM_ID,
@@ -27,9 +31,12 @@ import { DEFAULT_USE_QUERY_OPTIONS } from "utilities/constants";
 import Spinner from "components/Spinner";
 import MainContent from "components/MainContent";
 import TeamsHeader from "components/TeamsHeader";
+import SectionHeader from "components/SectionHeader";
+import PageDescription from "components/PageDescription";
 import DetailsNoHosts from "../components/cards/DetailsNoHosts";
 import SoftwareSummaryCard from "./SoftwareSummaryCard";
 import SoftwareInstallerCard from "./SoftwareInstallerCard";
+import TitleVersionsTable from "./TitleVersionsTable";
 
 const baseClass = "software-title-details-page";
 
@@ -178,12 +185,53 @@ const SoftwareTitleDetailsPage = ({
         softwareTitle={title}
         softwareId={softwareId}
         teamId={teamIdForApi}
-        isAvailableForInstall={isAvailableForInstall}
-        isLoading={isSoftwareTitleLoading}
         router={router}
         refetchSoftwareTitle={refetchSoftwareTitle}
         onToggleViewYaml={onToggleViewYaml}
       />
+    );
+  };
+
+  const renderLibrarySection = (title: ISoftwareTitleDetails) => {
+    const installerCard = renderSoftwareInstallerCard(title);
+    if (!installerCard) {
+      return null;
+    }
+    return (
+      <section className={`${baseClass}__section`}>
+        <SectionHeader title="Library" />
+        <PageDescription content="Software available to be installed" />
+        {installerCard}
+      </section>
+    );
+  };
+
+  const renderInventorySection = (title: ISoftwareTitleDetails) => {
+    // Mirrors the prior gating from SoftwareSummaryCard — hide for sources
+    // that don't report versions/hosts (tgz/sh/ps1 packages) and when no
+    // hosts have the software installed yet.
+    const showVersionsTable =
+      !!title.hosts_count &&
+      !NO_VERSION_OR_HOST_DATA_SOURCES.includes(title.source);
+
+    if (!showVersionsTable) {
+      return null;
+    }
+
+    return (
+      <section className={`${baseClass}__section`}>
+        <SectionHeader title="Inventory" />
+        <PageDescription content="Versions installed across all hosts" />
+        <TitleVersionsTable
+          router={router}
+          data={title.versions ?? []}
+          isLoading={isSoftwareTitleLoading}
+          teamIdForApi={teamIdForApi}
+          isIPadOSOrIOSApp={isIpadOrIphoneSoftwareSource(title.source)}
+          isAvailableForInstall={isAvailableForInstall}
+          countsUpdatedAt={title.counts_updated_at}
+        />
+      </section>
     );
   };
 
@@ -205,7 +253,8 @@ const SoftwareTitleDetailsPage = ({
       return (
         <>
           {renderSoftwareSummaryCard(softwareTitle)}
-          {renderSoftwareInstallerCard(softwareTitle)}
+          {renderLibrarySection(softwareTitle)}
+          {renderInventorySection(softwareTitle)}
         </>
       );
     }
