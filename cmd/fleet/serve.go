@@ -25,6 +25,7 @@ import (
 	"github.com/WatchBeam/clock"
 	"github.com/e-dard/netbug"
 	"github.com/fleetdm/fleet/v4/cmd/fleetctl/fleetctl"
+	"github.com/fleetdm/fleet/v4/ee/server/googleworkspace"
 	"github.com/fleetdm/fleet/v4/ee/server/licensing"
 	"github.com/fleetdm/fleet/v4/ee/server/scim"
 	eeservice "github.com/fleetdm/fleet/v4/ee/server/service"
@@ -947,6 +948,16 @@ func runServeCmd(cmd *cobra.Command, configManager configpkg.Manager, debug, dev
 			},
 		); err != nil {
 			initFatal(err, "failed to register calendar schedule")
+		}
+	}
+
+	if license.IsPremium() {
+		if err := cronSchedules.StartCronSchedule(
+			func() (fleet.CronSchedule, error) {
+				return cron.NewGoogleWorkspaceSchedule(ctx, instanceID, ds, googleworkspace.NewDirectory, logger)
+			},
+		); err != nil {
+			initFatal(err, "failed to register google workspace sync schedule")
 		}
 	}
 
