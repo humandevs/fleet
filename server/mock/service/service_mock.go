@@ -514,7 +514,7 @@ type GetInHouseAppManifestFunc func(ctx context.Context, titleID uint, teamID *u
 
 type GetInHouseAppPackageFunc func(ctx context.Context, titleID uint, teamID *uint) (*fleet.DownloadSoftwareInstallerPayload, error)
 
-type MDMAppleProcessOTAEnrollmentFunc func(ctx context.Context, certificates []*x509.Certificate, rootSigner *x509.Certificate, enrollSecret string, idpUUID string, deviceInfo fleet.MDMAppleMachineInfo) ([]byte, error)
+type MDMAppleProcessOTAEnrollmentFunc func(ctx context.Context, certificates []*x509.Certificate, rootSigner *x509.Certificate, enrollSecret string, idpUUID string, personal bool, deviceInfo fleet.MDMAppleMachineInfo) ([]byte, error)
 
 type ListVulnerabilitiesFunc func(ctx context.Context, opt fleet.VulnListOptions) ([]fleet.VulnerabilityWithMetadata, *fleet.PaginationMetadata, error)
 
@@ -700,13 +700,13 @@ type UpdateMDMAppleSetupFunc func(ctx context.Context, payload fleet.MDMAppleSet
 
 type TriggerMigrateMDMDeviceFunc func(ctx context.Context, host *fleet.Host) error
 
-type GetMDMManualEnrollmentProfileFunc func(ctx context.Context) ([]byte, error)
+type GetMDMManualEnrollmentProfileFunc func(ctx context.Context, personal bool) ([]byte, error)
 
 type TriggerLinuxDiskEncryptionEscrowFunc func(ctx context.Context, host *fleet.Host) error
 
 type CheckMDMAppleEnrollmentWithMinimumOSVersionFunc func(ctx context.Context, m *fleet.MDMAppleMachineInfo) (*fleet.MDMAppleSoftwareUpdateRequired, error)
 
-type GetOTAProfileFunc func(ctx context.Context, enrollSecret string, idpUUID string) ([]byte, error)
+type GetOTAProfileFunc func(ctx context.Context, enrollSecret string, idpUUID string, personal bool) ([]byte, error)
 
 type TriggerCronScheduleFunc func(ctx context.Context, name string) error
 
@@ -4023,11 +4023,11 @@ func (s *Service) GetInHouseAppPackage(ctx context.Context, titleID uint, teamID
 	return s.GetInHouseAppPackageFunc(ctx, titleID, teamID)
 }
 
-func (s *Service) MDMAppleProcessOTAEnrollment(ctx context.Context, certificates []*x509.Certificate, rootSigner *x509.Certificate, enrollSecret string, idpUUID string, deviceInfo fleet.MDMAppleMachineInfo) ([]byte, error) {
+func (s *Service) MDMAppleProcessOTAEnrollment(ctx context.Context, certificates []*x509.Certificate, rootSigner *x509.Certificate, enrollSecret string, idpUUID string, personal bool, deviceInfo fleet.MDMAppleMachineInfo) ([]byte, error) {
 	s.mu.Lock()
 	s.MDMAppleProcessOTAEnrollmentFuncInvoked = true
 	s.mu.Unlock()
-	return s.MDMAppleProcessOTAEnrollmentFunc(ctx, certificates, rootSigner, enrollSecret, idpUUID, deviceInfo)
+	return s.MDMAppleProcessOTAEnrollmentFunc(ctx, certificates, rootSigner, enrollSecret, idpUUID, personal, deviceInfo)
 }
 
 func (s *Service) ListVulnerabilities(ctx context.Context, opt fleet.VulnListOptions) ([]fleet.VulnerabilityWithMetadata, *fleet.PaginationMetadata, error) {
@@ -4674,11 +4674,11 @@ func (s *Service) TriggerMigrateMDMDevice(ctx context.Context, host *fleet.Host)
 	return s.TriggerMigrateMDMDeviceFunc(ctx, host)
 }
 
-func (s *Service) GetMDMManualEnrollmentProfile(ctx context.Context) ([]byte, error) {
+func (s *Service) GetMDMManualEnrollmentProfile(ctx context.Context, personal bool) ([]byte, error) {
 	s.mu.Lock()
 	s.GetMDMManualEnrollmentProfileFuncInvoked = true
 	s.mu.Unlock()
-	return s.GetMDMManualEnrollmentProfileFunc(ctx)
+	return s.GetMDMManualEnrollmentProfileFunc(ctx, personal)
 }
 
 func (s *Service) TriggerLinuxDiskEncryptionEscrow(ctx context.Context, host *fleet.Host) error {
@@ -4695,11 +4695,11 @@ func (s *Service) CheckMDMAppleEnrollmentWithMinimumOSVersion(ctx context.Contex
 	return s.CheckMDMAppleEnrollmentWithMinimumOSVersionFunc(ctx, m)
 }
 
-func (s *Service) GetOTAProfile(ctx context.Context, enrollSecret string, idpUUID string) ([]byte, error) {
+func (s *Service) GetOTAProfile(ctx context.Context, enrollSecret string, idpUUID string, personal bool) ([]byte, error) {
 	s.mu.Lock()
 	s.GetOTAProfileFuncInvoked = true
 	s.mu.Unlock()
-	return s.GetOTAProfileFunc(ctx, enrollSecret, idpUUID)
+	return s.GetOTAProfileFunc(ctx, enrollSecret, idpUUID, personal)
 }
 
 func (s *Service) TriggerCronSchedule(ctx context.Context, name string) error {
