@@ -10,6 +10,9 @@ misleading. See [OSS.md §9](./OSS.md#9-where-integration-code-should-live).
 
 ## Contents
 
+- **[DEV-SETUP.md](./DEV-SETUP.md)** — local dev environment (Windows-first): Go via `gobrew` (matching
+  Fleet's pinned `go 1.26.4`), Docker for MySQL/Redis, and the build/test/mock-regen commands.
+
 - **[OSS.md](./OSS.md)** — the master assessment: what Fleet's open-source (MIT) edition can/can't
   do, the licensing/legal requirements to fork and sell it, the hosted-cloud dependencies to
   replace, our **decisions of record**, and designs for the target integrations (winget/Chocolatey/

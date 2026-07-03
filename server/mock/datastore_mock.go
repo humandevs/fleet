@@ -856,6 +856,12 @@ type SaveHostAdditionalFunc func(ctx context.Context, hostID uint, additional *j
 
 type SetOrUpdateMunkiInfoFunc func(ctx context.Context, hostID uint, version string, errors []string, warnings []string) error
 
+type SetOrUpdateHostIntegrationStatusFunc func(ctx context.Context, status *fleet.HostIntegrationStatus) error
+
+type ListHostIntegrationStatusFunc func(ctx context.Context, hostID uint) ([]*fleet.HostIntegrationStatus, error)
+
+type AggregatedHostIntegrationStatusFunc func(ctx context.Context, teamID *uint) ([]*fleet.AggregatedIntegrationStatus, error)
+
 type SetOrUpdateMDMDataFunc func(ctx context.Context, hostID uint, isServer bool, enrolled bool, serverURL string, installedFromDep bool, name string, fleetEnrollRef string, isPersonalEnrollment bool) error
 
 type UpdateMDMDataFunc func(ctx context.Context, hostID uint, enrolled bool) error
@@ -3364,6 +3370,15 @@ type DataStore struct {
 
 	SetOrUpdateMunkiInfoFunc        SetOrUpdateMunkiInfoFunc
 	SetOrUpdateMunkiInfoFuncInvoked bool
+
+	SetOrUpdateHostIntegrationStatusFunc        SetOrUpdateHostIntegrationStatusFunc
+	SetOrUpdateHostIntegrationStatusFuncInvoked bool
+
+	ListHostIntegrationStatusFunc        ListHostIntegrationStatusFunc
+	ListHostIntegrationStatusFuncInvoked bool
+
+	AggregatedHostIntegrationStatusFunc        AggregatedHostIntegrationStatusFunc
+	AggregatedHostIntegrationStatusFuncInvoked bool
 
 	SetOrUpdateMDMDataFunc        SetOrUpdateMDMDataFunc
 	SetOrUpdateMDMDataFuncInvoked bool
@@ -8168,6 +8183,27 @@ func (s *DataStore) SetOrUpdateMunkiInfo(ctx context.Context, hostID uint, versi
 	s.SetOrUpdateMunkiInfoFuncInvoked = true
 	s.mu.Unlock()
 	return s.SetOrUpdateMunkiInfoFunc(ctx, hostID, version, errors, warnings)
+}
+
+func (s *DataStore) SetOrUpdateHostIntegrationStatus(ctx context.Context, status *fleet.HostIntegrationStatus) error {
+	s.mu.Lock()
+	s.SetOrUpdateHostIntegrationStatusFuncInvoked = true
+	s.mu.Unlock()
+	return s.SetOrUpdateHostIntegrationStatusFunc(ctx, status)
+}
+
+func (s *DataStore) ListHostIntegrationStatus(ctx context.Context, hostID uint) ([]*fleet.HostIntegrationStatus, error) {
+	s.mu.Lock()
+	s.ListHostIntegrationStatusFuncInvoked = true
+	s.mu.Unlock()
+	return s.ListHostIntegrationStatusFunc(ctx, hostID)
+}
+
+func (s *DataStore) AggregatedHostIntegrationStatus(ctx context.Context, teamID *uint) ([]*fleet.AggregatedIntegrationStatus, error) {
+	s.mu.Lock()
+	s.AggregatedHostIntegrationStatusFuncInvoked = true
+	s.mu.Unlock()
+	return s.AggregatedHostIntegrationStatusFunc(ctx, teamID)
 }
 
 func (s *DataStore) SetOrUpdateMDMData(ctx context.Context, hostID uint, isServer bool, enrolled bool, serverURL string, installedFromDep bool, name string, fleetEnrollRef string, isPersonalEnrollment bool) error {
