@@ -55,6 +55,7 @@ The following terms were recently renamed. Use the new terms in conversation and
 ## Opening a pull request
 
 - The PR description MUST start from `.github/pull_request_template.md`. When creating a PR (e.g. `gh pr create`), use that file as the body and fill it in — do not open a PR with an empty or freeform description. A CI check (`check-pr-template`) fails PRs whose description is missing the template.
+- For user-visible changes, add a changelog file under `changes/` (or `orbit/changes/`, `ee/fleetd-chrome/changes/`): one file per PR, named after the issue/feature, containing a short user-facing bullet describing the change. See `docs/Contributing/guides/committing-changes.md`. The `changes/.keep` file is a placeholder — leave it.
 
 ## Development commands
 
