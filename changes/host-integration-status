@@ -1,0 +1,5 @@
+- Added `GET /api/latest/fleet/hosts/:id/integration_status`, returning normalized third-party coverage
+  status (antivirus, MDR, remote access, backups, disk encryption) per host as a vendor-agnostic "host
+  integration status" store — like the MacAdmins card, but generic. Providers write per-host cells; the
+  read path renders cells older than a per-category freshness window as "unknown" so stale data is never
+  shown as covered.
