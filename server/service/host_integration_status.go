@@ -64,9 +64,15 @@ func (svc *Service) HostIntegrationStatus(ctx context.Context, hostID uint) ([]*
 		return nil, ctxerr.Wrap(ctx, err, "list host integration status")
 	}
 
-	// Freshness gate: a cell older than its category TTL is rendered unknown so the coverage matrix
-	// never shows stale data as covered.
-	now := time.Now()
+	applyIntegrationStaleness(statuses, time.Now())
+
+	return statuses, nil
+}
+
+// applyIntegrationStaleness marks any coverage cell older than its category freshness TTL as stale
+// and forces its state to "unknown", so the coverage matrix never renders stale data as covered
+// (human/RISK-REGISTER.md decide-now #3).
+func applyIntegrationStaleness(statuses []*fleet.HostIntegrationStatus, now time.Time) {
 	for _, s := range statuses {
 		ttl := defaultIntegrationStaleTTL
 		if t, ok := integrationStaleTTL[s.Category]; ok {
@@ -77,6 +83,4 @@ func (svc *Service) HostIntegrationStatus(ctx context.Context, hostID uint) ([]*
 			s.State = fleet.IntegrationStateUnknown
 		}
 	}
-
-	return statuses, nil
 }

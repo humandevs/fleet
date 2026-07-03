@@ -1232,6 +1232,15 @@ type Datastore interface {
 	SaveHostAdditional(ctx context.Context, hostID uint, additional *json.RawMessage) error
 
 	SetOrUpdateMunkiInfo(ctx context.Context, hostID uint, version string, errors, warnings []string) error
+
+	// SetOrUpdateHostIntegrationStatus upserts one (host, source, category) coverage cell reported by
+	// a community-plugin provider (feeds the host coverage matrix). MIT/free — no premium license.
+	SetOrUpdateHostIntegrationStatus(ctx context.Context, status *HostIntegrationStatus) error
+	// ListHostIntegrationStatus returns all coverage cells for a host (staleness applied at the
+	// service layer).
+	ListHostIntegrationStatus(ctx context.Context, hostID uint) ([]*HostIntegrationStatus, error)
+	// AggregatedHostIntegrationStatus returns a fleet-wide, optionally team-scoped, coverage rollup.
+	AggregatedHostIntegrationStatus(ctx context.Context, teamID *uint) ([]*AggregatedIntegrationStatus, error)
 	SetOrUpdateMDMData(ctx context.Context, hostID uint, isServer, enrolled bool, serverURL string, installedFromDep bool, name string, fleetEnrollRef string, isPersonalEnrollment bool) error
 	// UpdateMDMData updates the `enrolled` field of the host with the given ID.
 	UpdateMDMData(ctx context.Context, hostID uint, enrolled bool) error
