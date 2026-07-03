@@ -120,9 +120,12 @@ legal exposure are:
    Generate *our own* ECDSA/Ed25519 keypair, embed *our* pubkey, reimplement `LoadLicense` to return
    `*fleet.LicenseInfo`. Reuse `golang-jwt` (MIT). Do **not** copy `ee/server/licensing/pubkey.pem`
    or its `validate()`. Repoint `cmd/fleet/serve.go:1284 initLicense()` and **delete the embedded
-   Fleet-signed dev-license JWT** (`serve.go:1277-1282`). *Simplest path if we don't gate our own
-   product:* make the validator return `TierPremium` unconditionally — this instantly unlocks every
-   `license.IsPremium(ctx)` branch and all 172 frontend `isPremiumTier` paths with zero `ee/` code.
+   Fleet-signed dev-license JWT** (`serve.go:1277-1282`). **Decided approach (single-tier, re-tierable):**
+   make the validator return `TierPremium` **when a config flag is set** (default on for our internal
+   build) — this instantly unlocks every `license.IsPremium(ctx)` branch and all 172 frontend
+   `isPremiumTier` paths with zero `ee/` code, **while leaving every gate in place** so flipping the flag
+   off (plus wiring real license claims) re-enables tiering later. Do **not** delete the gates or inline
+   premium logic into core.
 5. **Rebuild premium features clean-room** (only the ones we want to sell) — see §6.
 6. **Rebrand completely** — product name, logos, the `X-Fleet-License` header
    (`server/fleet/app.go:1802`), and the pervasive `fleetdm.com` URLs hardcoded in user-facing error
@@ -342,6 +345,10 @@ replace or remove each, or it silently depends on (and leaks telemetry to) Fleet
 
 ## 8. Integration designs
 
+> **Operator setup guides** (credentials, tokens, install commands) for each vendor live in
+> [`setup/`](./setup/): [Mosyle](./setup/mosyle.md) · [Action1](./setup/action1.md) ·
+> [Bitdefender GravityZone](./setup/bitdefender-gravityzone.md) · [Huntress](./setup/huntress.md).
+
 **The good news, restated:** every target integration is **net-new MIT code** that hooks into an
 *existing* extension point. None require `ee/`. The patterns to reuse:
 
@@ -464,10 +471,14 @@ sidesteps the APNs/ABM cloud burden (§7).
   APNs/ABM dependency we're avoiding.
 - **Effort:** L.
 
-> Decision to make: do we want Mosyle as the *Apple MDM authority* (this design — fast, low-risk,
-> least cloud burden) **or** do we eventually want to be the Apple MDM authority ourselves (rebuild
-> the §6 #3 advanced-MDM stack + solve APNs vendor signing)? The two aren't mutually exclusive —
-> Mosyle-delegated and native-Fleet Apple devices can coexist if the per-host source marker is clean.
+> **Decided (decision 2):** Mosyle is the **primary** Apple MDM authority (already stable for us), and
+> the native Fleet Apple MDM stack is **kept as an alternative**. The two coexist via a clean per-host
+> `mdm source` marker, so native-Fleet Apple devices and Mosyle-delegated devices can be managed side
+> by side. This keeps §6 #3 (advanced native Apple MDM) and APNs vendor signing (§7) off the critical
+> path — retained as an option, not a v1 requirement.
+>
+> **Setup:** see [`setup/mosyle.md`](./setup/mosyle.md) for obtaining the Mosyle API token and
+> configuring the integration.
 
 ### 8.5 IPaaS onboarding/offboarding (future)
 
@@ -502,6 +513,14 @@ for docs, and first-class MIT packages under `server/` for code — *not* a "plu
 Fleet has no plugin architecture.** Integrations are compiled into the binary as ordinary Go packages
 (that's how Jira/Zendesk/Calendar/Android all work). A `plugins/` folder would imply a runtime
 extension system that doesn't exist and would fight the codebase.
+
+> **Refinement (see [PLUGINS.md](./PLUGINS.md)):** we *are* building an extension-point architecture —
+> a **compile-time provider registry** (`HostStatusProvider`, `IntegrationProvider`, `RouteRegistrar`,
+> `CronRegistrar`) that generalizes seams Fleet already has (`EnterpriseOverrides`, the Munki
+> host-status pattern, the `HandlerRoutesFunc` slice). That is *not* a runtime `plugins/` folder and
+> doesn't change the rule above: provider code still lives in first-class MIT packages under `server/`;
+> the registry is wiring only. A thin slice (the `HostStatusProvider` interface) is our upstream-PR
+> candidate.
 
 Recommended structure:
 
@@ -577,17 +596,38 @@ webhook; add Teams-based onboarding.
 - **APNs vendor signing** is the one genuinely hard external dependency for native Apple MDM —
   mitigated by upload-only or by delegating Apple to Mosyle.
 
-**Open questions for the team**
+**Decisions of record** (2026-07, from the team)
 
-1. **Tiering model:** single-tier (validator always premium) or do we want our *own* paid tiers
-   (reuse the MIT `isPremiumTier` machinery)? This decides Phase 0 step 4.
-2. **Apple strategy:** delegate to Mosyle (low cloud burden) vs. be the Apple MDM authority (rebuild
-   §6 #3 + solve APNs vendor signing)? Affects Phase 3 scope.
-3. **Do we keep multi-tenancy at all,** or flatten to single-tenant for v1? Teams is XL; many SMB UEM
-   use-cases don't need it. (Labels can substitute for grouping short-term.)
-4. **ChromeOS:** `ee/fleetd-chrome` is MIT-via-carve-out but lives under `ee/` — relocate + counsel
-   sign-off, or drop ChromeOS for v1?
-5. **Feed redistribution terms:** review EPSS (Cyentia) and CISA-KEV licensing for commercial resale.
+1. **Tiering — single-tier now, keep the door open.** Ship single-tier (license validator reports
+   premium unconditionally, behind a config flag) for **internal dogfooding first**. **Preserve the
+   tiering machinery**: do **not** rip out the `license.IsPremium(ctx)` gates or the frontend
+   `isPremiumTier`/`PremiumRoutes` machinery, and do **not** "inline premium logic into core." Keep
+   the `EnterpriseOverrides` seam and the gate structure so that **re-enabling paid tiers later (if we
+   productize) is a config/validator change, not a re-architecture.** This overrides the MDM agent's
+   "delete the stubs, inline to core" suggestion.
+2. **Apple strategy — Mosyle primary, native MDM kept as an alternative.** Use **Mosyle as the primary
+   Apple (iOS/iPadOS/macOS) MDM authority** (it already works and is stable for us) via the read/ingest
+   design in §8.4. **Keep the native Fleet Apple MDM stack available as an alternative** — the two
+   coexist via a per-host `mdm source` marker. This means §6 #3 (advanced native Apple MDM) is *not*
+   on the critical path but is retained as an option; APNs vendor signing (§7) only matters for the
+   native path.
+3. **Multi-tenancy — keep it.** We manage **multiple clients**, so the Teams/Fleets rebuild (§6 #1,
+   XL) stays in scope (Phase 3). Labels are the interim grouping primitive until it lands.
+4. **ChromeOS — deferred.** Skip for v1. Revisit later (Chromebooks are used as secure remote-desktop
+   endpoints we'll want to manage). `ee/fleetd-chrome` is MIT-via-carve-out; relocate + counsel
+   sign-off when we pick it back up.
+5. **CVE feeds — confirmed OK** for our use (EPSS/CISA-KEV).
+6. **Clean-room is mandatory and enforced.** Agents/engineers reimplementing `ee/` features must
+   **never read `ee/` source** — they work only from feature descriptions + the public `fleet.Service`
+   interface. See **[clean-room-protocol.md](./clean-room-protocol.md)** and the running log in
+   `clean-room-log.md`.
+7. **Bitdefender** integrates via the **GravityZone API/SDK**; **Action1** via **instance-ID MSI push +
+   REST API**. Per-vendor setup docs live in **[`setup/`](./setup/)**.
+
+**Still open (smaller):**
+
+- Exact host-matching precedence per vendor (serial vs. UUID vs. hostname) — decide during §8.2/§8.4 build.
+- Whether the native Apple MDM alternative (decision 2) is ever exposed to clients or stays internal-only.
 
 ---
 
