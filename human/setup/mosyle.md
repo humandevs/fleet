@@ -59,8 +59,13 @@ There are two API surfaces:
 - New bounded context **`server/mdm/mosyle/`** (mirror `server/mdm/android/`): a typed client + cron
   poller + datastore. Client built on `fleethttp.NewClient()` (never raw `http.Client`), holding host +
   accessToken + admin creds; a `login()` that caches the Bearer (v2) and refreshes on 401.
-- Config: a **Mosyle block** on `AppConfig.Integrations` (host, accessToken, admin email/password
-  **encrypted/masked**, enabled OS types, IP-restriction note), via **Settings → Integrations → Mosyle**.
+- Config: a **Mosyle block** entered via **Settings → Integrations → Mosyle**. ⚠️ **Store the secrets
+  envelope-encrypted in the fork's KMS-backed per-tenant secrets store — NOT plaintext in
+  `app_config_json` / not the Jira mask-only pattern** ([RISK-REGISTER.md #3](../RISK-REGISTER.md)). Mosyle
+  *mandates* the admin email+password on every call (a full Apple-MDM console credential — high value), and
+  its "Require User Credentials" can't be disabled, so you can't go fully token-only. Mitigate: a
+  **dedicated, least-privilege, IP-pinned** Mosyle admin whose password lives **only** in the KMS-encrypted
+  store; cache the v2 Bearer to minimize password use; monitor + rotate.
 - Poller (cron in `cmd/fleet/cron.go` + `server/service/schedule`): paginate `listdevices` per OS
   (`mac`/`ios`/`ipados`/`tvos`) until `DEVICES_NOTFOUND`; upsert hosts.
 - **Host mapping:** key by **`serial_number` → `deviceudid`**. Store Mosyle-native fields

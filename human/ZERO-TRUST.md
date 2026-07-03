@@ -131,6 +131,51 @@ not both). For turnkey SSO + posture with least assembly, **Cloudflare Access wi
 - Cloudflare body-size cap vs your largest installer/log post; Business-plan cap (200 MB) on your account.
 - Exact Cloudflare console labels (Access apps, service tokens, AOP, WAF exceptions).
 
+## Disaster recovery & failover (verified)
+
+**The load-bearing constraint: the server URL is immutable.** It's baked into Apple/Windows/Android MDM
+enrollment profiles + SCEP + fleetd/orbit config (`apple_mdm.go:1181-1186`, `mobileconfig/profiles.go:17,39`,
+`android/service/service.go:160,187`). Changing `server_url`/`apple_server_url` **forces every device to
+re-enroll / toggle MDM off-on** (`rest-api.md:2163,2573`). **Corollary: DR must preserve the SAME hostname —
+a "second domain" never reaches enrolled MDM devices, only osquery/orbit (and only with a fork change).**
+So the real primitive is **DNS/ingress failover of the one immutable hostname to a healthy backend**, not a
+second domain.
+
+**Which planes can fail over:** osquery, orbit/fleetd, Fleet Desktop → yes (via same-hostname re-point).
+**Apple/Windows/Android MDM → cannot** (URL pinned; only follow a same-hostname DNS re-point if the standby
+shares the same APNs topic + MDM/SCEP CA). State this plainly to MSP customers.
+
+- **Scenario A — Cloudflare-only outage (primary healthy):** you want a **break-glass second ingress to the
+  same primary on the same hostname**, not a warm spare (data's fine). Options: Cloudflare Load Balancing
+  **fallback pool** (health-checked), or a pre-staged **low-TTL direct-origin DNS record** (behind
+  Authenticated Origin Pulls + secret header, since the WAF is bypassed on that path). RPO 0, RTO ≈ DNS TTL
+  (keep the device hostname at 60s) + LB convergence (~1–5 min). Admin plane can tolerate a longer Access
+  outage; only the device hostname needs the fast path.
+- **Scenario B — primary-site/region loss (warm standby):** a **promotable cross-region DB** (Aurora Global:
+  switchover RPO≈0/RTO≈1 min; unplanned RPO≈1s/RTO<1 min; plain async MySQL: RPO = lag, manual RTO) + a warm
+  Fleet app pre-configured with the **identical `server_url`** pointed at the standby DB, then **re-point the
+  one hostname's DNS**. **Must replicate to the standby:** APNs cert+key, **SCEP/MDM CA cert+private key**,
+  ABM/ADE token, Android Pub/Sub creds, session keys — without the *same* MDM CA + APNs identity, pinned
+  devices reject the standby. (Enroll secrets + node keys ride the DB.) Target RTO 5–15 min.
+- **⚠️ A read-only spare is inert for the device plane.** Every agent check-in is a WRITE (node-key upsert,
+  `host_seen_times`, distributed writes, MDM results) and Fleet is single-writer
+  (`Reference-Architectures.md:40`). A read replica can serve admin/API **GETs** (a status console during an
+  outage) but **cannot accept one check-in** until promoted to RW. Never wire a read-only replica as an agent
+  endpoint.
+- **orbit fallback-URL fork change (defense-in-depth, osquery/orbit only):** orbit has **no native fallback
+  URL** (single `--fleet-url`, `orbit.go:105-107`) — add `--fleet-url-fallback` + rotate `BaseClient.BaseURL`
+  on sustained net/5xx (`client/base_client.go:29-41,108`, `client/orbit_client.go:358-395`). **Hard part:**
+  osquery is a child process with a start-time-only `--tls_hostname` (`osquery/flags.go:11-14`) → a URL swap
+  must **regenerate flags and restart osquery** (flap risk = enroll churn). **Zero MDM benefit.** Only works
+  if every fallback URL fronts the *same* DB. It edits shared files → file as a **candidate upstream PR**
+  ("agent server-URL failover") to avoid perpetual rebase drift.
+- **TUF update mirror** is a separate public origin — give it its own HA/mirror plan.
+
+**Recommended posture:** same-hostname DNS/ingress failover is the primary primitive (works for MDM too);
+pre-build the break-glass second ingress (Scenario A); run a promotable cross-region DB + warm standby with
+replicated MDM identity (Scenario B); build the orbit fallback as agent-plane defense-in-depth; mirror TUF
+independently; never expose a read-only spare to agents.
+
 ## Citations
 - Cloudflare: Tunnel, Access self-hosted apps, service tokens, WARP MDM parameters + device enrollment, WAF
   exceptions, API Shield (schema validation/mTLS/JWT), Authenticated Origin Pulls, Error 413 body limits —

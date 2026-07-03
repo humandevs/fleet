@@ -14,6 +14,10 @@ misleading. See [OSS.md §9](./OSS.md#9-where-integration-code-should-live).
   do, the licensing/legal requirements to fork and sell it, the hosted-cloud dependencies to
   replace, our **decisions of record**, and designs for the target integrations (winget/Chocolatey/
   Ninite Pro, Action1, Bitdefender GravityZone, Huntress, Android UEM, Mosyle MDM, future IPaaS).
+- **[RISK-REGISTER.md](./RISK-REGISTER.md)** — 🔴 **read early.** Adversarial red-team (code-verified) of
+  the whole design: the foundational **decide-now** calls (tenant isolation, secrets-at-rest, coverage
+  freshness, identity resolution, destructive-action guardrails), a ranked 23-item risk register, and
+  cheap quick-wins. Corrects the plaintext-secrets guidance in the setup docs.
 - **[PLUGIN-API-RFC.md](./PLUGIN-API-RFC.md)** — **the current plugin design of record**: a small,
   versioned Plugin API + an in-core adapter (version firewall) so compiled plugins survive minor Fleet
   upgrades; WASM primary / gRPC escape hatch; the upstream "host integration status" PR slice.
@@ -27,10 +31,25 @@ misleading. See [OSS.md §9](./OSS.md#9-where-integration-code-should-live).
   wedge), ScreenConnect, backups, and the build sequence.
 - **[ZERO-TRUST.md](./ZERO-TRUST.md)** — deployment: device-plane vs admin-plane split, the exact
   public/gated route prefixes, Cloudflare Tunnel/Access/WAF config, and the WARP model.
+- **[COMPLIANCE.md](./COMPLIANCE.md)** — SOC 2 / HIPAA / CMMC(800-171) / GDPR control→implementation map:
+  what's product vs infra vs operational, why instance-per-MSP is the big lever, and the phased in-source plan.
+- **[FORK-STRATEGY.md](./FORK-STRATEGY.md)** — keeping the fork rebasable: the precedence ladder (PR →
+  config/build-time → new-files → `go build -overlay` "modules" → git patch-stack), and the honest residual
+  cost (clean-room premium rebuilds in churny core files — the ladder can't fix that).
+- **[PREMIUM-ARCHITECTURE.md](./PREMIUM-ARCHITECTURE.md)** — building EE-equivalent modules as a drop-in
+  **provider** (a `server/premium/` bundle) wired at Fleet's existing one-point seam, not scattered core
+  patches; the `/extensions/`-folder + separate-repo path; and the honest limit (decouples wiring, not the
+  reimplementation cost).
 - **[CONFIG-MGMT.md](./CONFIG-MGMT.md)** — "DevOps for endpoints": Fleet-native convergence loop + DSC v3 /
   masterless Salt as orbit-invoked executors (no Salt master), with WARP per-site config as the example.
 - **[COLLECTORS.md](./COLLECTORS.md)** — collector-ingestion scaling (deferred until ~50k+ endpoints):
   push-first + Redis GCRA rate limiter as the throughput governor.
+- **[PROVISIONING.md](./PROVISIONING.md)** — config-as-code machine rollout (PDQ Deploy replacement): the
+  per-site baseline, the `cloud_platform` client-type field, and OneDrive/Google-Drive setup (with the two
+  verified capability gaps — OneDrive KFM excludes Videos; Google can't enforce folder backup).
+- **[AI-INSTALLER.md](./AI-INSTALLER.md)** — installing GUI-only apps: silent-install-first + layered
+  verification (the product), with AI GUI record/replay as a gated, threat-modeled last resort (Session-0
+  wall, brittleness, admin-RCE controls).
 - **[setup/](./setup/)** — per-vendor operator setup guides (Mosyle, Action1, Bitdefender, Huntress,
   ScreenConnect, Veeam/iDrive360 backups).
 
