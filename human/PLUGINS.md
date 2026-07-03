@@ -2,6 +2,14 @@
 
 > Companion to [`OSS.md`](./OSS.md). Where OSS.md decides *what* we build and *where the code lives* (§9), this document decides *how our differentiators plug in* without forking-in-place across the whole tree. Read [`OSS.md §9`](./OSS.md#9-where-integration-code-should-live) first: it already rules that **integration code lives in first-class MIT packages under `server/` — not a `plugins/` folder — because Fleet has no runtime plugin architecture.** Nothing here overturns that. What follows is the *compile-time* seam design that makes those packages pluggable behind stable interfaces.
 
+> **Superseding update (see [PLUGIN-API-RFC.md](./PLUGIN-API-RFC.md)):** the driving requirement became
+> *"plugins survive minor Fleet upgrades without recompiling, and ship as independently-compiled
+> artifacts."* That requires a **versioned wire boundary**, so the *distributable* plugin path is now the
+> **primary** direction: a small semver'd **Plugin API** + an in-core **adapter/version-firewall**, with
+> **WASM (Extism/wazero)** primary and **gRPC (go-plugin)** the escape hatch. This in-process registry
+> design still stands for **first-party** providers we compile ourselves and the **Tier-2 control-plane
+> hooks** (routes/cron/dashboard/host-actions) that can't cross a wire boundary. Read the RFC first.
+
 ## 0. TL;DR / recommendation
 
 - **Do not build a dynamic (runtime-loaded) plugin system.** Go's `plugin` stdlib is a dead end (no Windows, exact-toolchain/dep lockstep, no unload — its own docs steer you to the compile-time approach). `hashicorp/go-plugin` (out-of-process gRPC) is proven but is aimed at *untrusted, third-party, multi-language* plugins you don't control — the opposite of a single-vendor fork where we build both sides.

@@ -14,9 +14,12 @@ misleading. See [OSS.md §9](./OSS.md#9-where-integration-code-should-live).
   do, the licensing/legal requirements to fork and sell it, the hosted-cloud dependencies to
   replace, our **decisions of record**, and designs for the target integrations (winget/Chocolatey/
   Ninite Pro, Action1, Bitdefender GravityZone, Huntress, Android UEM, Mosyle MDM, future IPaaS).
-- **[PLUGINS.md](./PLUGINS.md)** — the extension-point architecture: a compile-time provider registry
-  (`HostStatusProvider` for the coverage matrix, `IntegrationProvider`, route/cron registrars) that
-  makes our differentiators pluggable behind stable MIT interfaces, with an upstream-PR candidate.
+- **[PLUGIN-API-RFC.md](./PLUGIN-API-RFC.md)** — **the current plugin design of record**: a small,
+  versioned Plugin API + an in-core adapter (version firewall) so compiled plugins survive minor Fleet
+  upgrades; WASM primary / gRPC escape hatch; the upstream "host integration status" PR slice.
+- **[PLUGINS.md](./PLUGINS.md)** — the earlier extension-point analysis (in-process provider registry,
+  the capability taxonomy, the seam map). Superseded on the *distributable/cross-version* question by
+  PLUGIN-API-RFC.md; still current for first-party in-process providers and the seam inventory.
 - **[clean-room-protocol.md](./clean-room-protocol.md)** — the wall for legally reimplementing `ee/`
   features: implementers must never read `ee/` source. Enforced for AI agents too.
 - **[clean-room-log.md](./clean-room-log.md)** — running record of describe-side vs. build-side work.
@@ -26,6 +29,8 @@ misleading. See [OSS.md §9](./OSS.md#9-where-integration-code-should-live).
   public/gated route prefixes, Cloudflare Tunnel/Access/WAF config, and the WARP model.
 - **[CONFIG-MGMT.md](./CONFIG-MGMT.md)** — "DevOps for endpoints": Fleet-native convergence loop + DSC v3 /
   masterless Salt as orbit-invoked executors (no Salt master), with WARP per-site config as the example.
+- **[COLLECTORS.md](./COLLECTORS.md)** — collector-ingestion scaling (deferred until ~50k+ endpoints):
+  push-first + Redis GCRA rate limiter as the throughput governor.
 - **[setup/](./setup/)** — per-vendor operator setup guides (Mosyle, Action1, Bitdefender, Huntress,
   ScreenConnect, Veeam/iDrive360 backups).
 
