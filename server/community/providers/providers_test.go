@@ -10,7 +10,7 @@ import (
 
 func TestRegister(t *testing.T) {
 	r := community.NewRegistry()
-	Register(r, Config{ScreenConnect: screenconnect.Config{InstanceURL: "https://example.screenconnect.com"}})
+	require.NoError(t, Register(r, Config{ScreenConnect: screenconnect.Config{InstanceURL: "https://remote.example.com"}}))
 
 	var sources []string
 	for _, p := range r.HostStatusProviders() {
@@ -20,4 +20,10 @@ func TestRegister(t *testing.T) {
 		[]string{"screenconnect", "bitdefender", "huntress", "veeam", "idrive360", "warp"},
 		sources,
 	)
+}
+
+func TestRegisterRequiresSelfHostedURL(t *testing.T) {
+	// Self-hosted has no default domain — an unset ScreenConnect URL must stop wiring.
+	err := Register(community.NewRegistry(), Config{})
+	require.Error(t, err)
 }

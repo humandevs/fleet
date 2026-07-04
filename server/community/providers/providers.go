@@ -20,12 +20,17 @@ type Config struct {
 
 // Register adds the first-party community host-status providers to r. ScreenConnect is real
 // (deployment); the rest are mocks today, each mapped to one coverage-matrix category. Real-vs-mock
-// status is documented per human/setup/*.
-func Register(r *community.Registry, cfg Config) {
+// status is documented per human/setup/*. It validates provider config up front — a missing self-hosted
+// ScreenConnect URL fails here rather than producing broken install commands downstream.
+func Register(r *community.Registry, cfg Config) error {
+	if err := cfg.ScreenConnect.Validate(); err != nil {
+		return err
+	}
 	r.RegisterHostStatusProvider(screenconnect.New(cfg.ScreenConnect)) // remote_access
 	r.RegisterHostStatusProvider(bitdefender.New())                    // av            (mock)
 	r.RegisterHostStatusProvider(huntress.New())                       // mdr           (mock)
 	r.RegisterHostStatusProvider(veeam.New())                          // backups       (mock)
 	r.RegisterHostStatusProvider(idrive360.New())                      // backups       (mock)
 	r.RegisterHostStatusProvider(warp.New())                           // remote_access (mock)
+	return nil
 }

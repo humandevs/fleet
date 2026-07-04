@@ -6,31 +6,102 @@ package screenconnect
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
+	"github.com/fleetdm/fleet/v4/pkg/fleethttp"
+	"github.com/fleetdm/fleet/v4/server/community"
+	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 )
 
 // Config is the per-instance ScreenConnect configuration. Secrets must be stored envelope-encrypted
 // (human/RISK-REGISTER.md #3), never plaintext.
 type Config struct {
-	// InstanceURL is the ScreenConnect base URL, e.g. "https://example.screenconnect.com".
+	// InstanceURL is the ScreenConnect server base URL. For our self-hosted instance this is our own
+	// server (e.g. "https://remote.example.com" or "https://example.com:8040") — there is no
+	// *.screenconnect.com default, so it is REQUIRED (see Validate). The per-org installer downloaded from
+	// this URL embeds the server's relay address, certificate thumbprint, and join key, so an installed
+	// agent auto-registers without an API credential.
 	InstanceURL string
+	// RelayHost and RelayPort override the agent's phone-home relay endpoint (installer h=/p= params).
+	// Needed for self-hosted deployments where the relay endpoint differs from the web URL — e.g. the web
+	// UI is reverse-proxied on 443 but the relay listens on the server host:8041. Leave zero to use the
+	// values baked into the installer by the server (correct when the installer is downloaded directly
+	// from InstanceURL). Cloud instances never need these.
+	RelayHost string
+	RelayPort int
+	// Thumbprint overrides the server certificate fingerprint (installer k= param). Set only for a
+	// self-hosted server with a self-signed cert when you also override RelayHost. Leave empty to use the
+	// installer default.
+	Thumbprint string
 	// AccessSecret is the RESTful API Manager shared secret (sent as the CTRLAuthHeader header) used to
-	// poll session/online status. Optional for deployment-only use.
+	// poll session/online status. Optional: if empty, Collect is a no-op (deployment-only mode).
 	AccessSecret string
+	// APIPath is the RESTful API Manager service path for the session-list method, relative to InstanceURL
+	// (e.g. "/App_Extensions/<extension-GUID>/Service.ashx/GetSessionsByFilter"). It is instance-specific
+	// (the extension GUID is assigned on install), so it is configured, not hardcoded. Empty ⇒ Collect
+	// no-ops. See human/setup/screenconnect.md.
+	APIPath string
 	// InstallerName is the base name of the org's access-agent build (the "<Name>" in
 	// /Bin/<Name>.ClientSetup.msi). Defaults to "ScreenConnect".
 	InstallerName string
 }
 
-// OrgLink maps a Fleet team/site to the ScreenConnect company/site custom properties that link a device
-// to the correct organization on install (CustomProperty1 = Company, CustomProperty2 = Site).
+// Validate checks required configuration. InstanceURL is required and must be an absolute http(s) URL:
+// self-hosted has no conventional default domain, so an unset/typo'd URL must fail loudly rather than
+// produce a broken "/Bin/..." install command.
+func (c Config) Validate() error {
+	raw := strings.TrimSpace(c.InstanceURL)
+	if raw == "" {
+		return fleet.NewInvalidArgumentError("screenconnect.instance_url",
+			"is required (set your self-hosted ScreenConnect base URL, e.g. https://remote.example.com)")
+	}
+	u, err := url.Parse(raw)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return fleet.NewInvalidArgumentError("screenconnect.instance_url",
+			"must be an absolute http(s) URL, e.g. https://remote.example.com:8040")
+	}
+	return nil
+}
+
+// maxCustomProperties is ScreenConnect's fixed limit of custom property fields per session.
+const maxCustomProperties = 8
+
+// OrgLink carries the ScreenConnect custom properties (a.k.a. CustomField / CustomProperty 1..8) baked
+// into the installer as repeated c= values, in order. ScreenConnect session-group filters match on these
+// to route a device into a group: by convention CustomProperty1 = client/company (the group key),
+// CustomProperty2 = site, then department, device type, etc. Only position matters on install — the human
+// labels are configured server-side.
 type OrgLink struct {
-	Company string
-	Site    string
+	// CustomProperties are CustomProperty1..8 in order (values past 8 are dropped). Index 0 ->
+	// CustomProperty1, the value group filters usually key on. Interior empties are preserved (c= is
+	// positional); trailing empties are omitted.
+	CustomProperties []string
+}
+
+// Org is a convenience constructor for the common case: CustomProperty1 = client (the group key),
+// CustomProperty2 = site, plus any further positional properties (department, device type, ...).
+func Org(client, site string, extra ...string) OrgLink {
+	return OrgLink{CustomProperties: append([]string{client, site}, extra...)}
+}
+
+// props returns the custom properties to emit: capped at ScreenConnect's 8, with trailing empties trimmed
+// (interior empties kept, since c= is positional).
+func (o OrgLink) props() []string {
+	p := o.CustomProperties
+	if len(p) > maxCustomProperties {
+		p = p[:maxCustomProperties]
+	}
+	end := len(p)
+	for end > 0 && p[end-1] == "" {
+		end--
+	}
+	return p[:end]
 }
 
 // Provider implements community.HostStatusProvider for remote access.
@@ -54,20 +125,35 @@ func (p *Provider) Categories() []fleet.IntegrationCategory {
 	return []fleet.IntegrationCategory{fleet.IntegrationCategoryRemoteAccess}
 }
 
-// InstallerURL builds the org-linked access-agent installer URL for a host. The repeated c= values
-// populate ScreenConnect CustomProperty1..N (Company, Site) — this is what links the device to the
-// right organization on install. t= sets the session name (the Fleet hostname); e=Access selects the
-// unattended access session type. See human/setup/screenconnect.md.
+// InstallerURL builds the org-linked access-agent installer URL for a host. t= sets the session name (the
+// Fleet hostname); e=Access selects the unattended access session type; the repeated c= values populate
+// ScreenConnect CustomProperty1..8 in order — this is what links the device to the right group
+// (client/site) on install. See human/setup/screenconnect.md.
 func (p *Provider) InstallerURL(hostname string, org OrgLink) string {
 	base := strings.TrimRight(p.cfg.InstanceURL, "/")
-	return fmt.Sprintf(
-		"%s/Bin/%s.ClientSetup.msi?e=Access&y=Guest&t=%s&c=%s&c=%s",
+	u := fmt.Sprintf(
+		"%s/Bin/%s.ClientSetup.msi?e=Access&y=Guest&t=%s",
 		base,
 		url.PathEscape(p.cfg.InstallerName),
 		url.QueryEscape(hostname),
-		url.QueryEscape(org.Company),
-		url.QueryEscape(org.Site),
 	)
+	// Repeated c= values set CustomProperty1..8 in order — the group/client/site handoff.
+	for _, c := range org.props() {
+		u += "&c=" + url.QueryEscape(c)
+	}
+	// Self-hosted relay/thumbprint overrides — appended only when set, so the default path (download the
+	// installer from InstanceURL, which bakes in the server's own relay) is byte-for-byte unchanged and
+	// cloud is unaffected. Use these for the split web/relay topology (reverse proxy on 443, relay on 8041).
+	if p.cfg.RelayHost != "" {
+		u += "&h=" + url.QueryEscape(p.cfg.RelayHost)
+	}
+	if p.cfg.RelayPort > 0 {
+		u += fmt.Sprintf("&p=%d", p.cfg.RelayPort)
+	}
+	if p.cfg.Thumbprint != "" {
+		u += "&k=" + url.QueryEscape(p.cfg.Thumbprint)
+	}
+	return u
 }
 
 // WindowsInstallScript returns a PowerShell script that downloads and silently installs the org-linked
@@ -82,13 +168,104 @@ Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing
 `, p.InstallerURL(hostname, org))
 }
 
-// Sync polls ScreenConnect for online/last-connected status and upserts remote_access coverage cells.
-// Not yet implemented — the RESTful API Manager integration is a follow-up (see
-// human/setup/screenconnect.md). Kept as the poller seam so wiring is ready.
-func (p *Provider) Sync(ctx context.Context, ds fleet.Datastore) error {
-	// TODO: GetSessionsByFilter via the RESTful API Manager (header CTRLAuthHeader = AccessSecret),
-	// map GuestConnectedCount>0 to IntegrationStateProtected, and upsert per host by stored SessionID.
+// EnsureSessionGroup idempotently provisions a ScreenConnect Access session group so installs land in the
+// right place in the ScreenConnect UI. It is meant to be called when a Fleet client (team) or site is
+// created or renamed: it ensures a session group whose filter is `CustomProperty1 = '<client>'` exists,
+// plus a child group per site additionally matching `CustomProperty2 = '<site>'`. Note the division of
+// labor: a device is actually ROUTED by the CustomProperty values baked into its installer (see
+// InstallerURL / OrgLink); this call only ensures the matching group (a saved filter view) exists so those
+// devices show up grouped rather than loose.
+//
+// NOT YET IMPLEMENTED. Confidence is low: the RESTful API Manager exposes session read/command methods, but
+// session-GROUP CRUD is an admin/config surface. Provisioning options, in order of preference:
+//  1. A supported RESTful API Manager method, if the installed extension exposes SessionGroup CRUD.
+//  2. Manage the server config directly (write SessionGroup elements) — viable because we self-host.
+//  3. Internal page service (version-fragile) as a last resort — avoid as primary.
+// Kept as the provisioning seam so the Fleet team/site lifecycle hook has something to call. See
+// human/setup/screenconnect.md § "Group provisioning".
+func (p *Provider) EnsureSessionGroup(ctx context.Context, client string, sites ...string) error {
+	// TODO: create/patch the SessionGroup(s) via the chosen surface above. Idempotent by group name.
 	_ = ctx
-	_ = ds
+	_ = client
+	_ = sites
 	return nil
+}
+
+// apiSession is the subset of the ScreenConnect Session Manager object model we consume. Field names
+// follow the documented model (GuestConnectedCount, Name, GuestInfo.MachineName). Parsed defensively —
+// the exact RESTful API Manager response shape is instance/extension-specific (confidence: medium; see
+// human/setup/screenconnect.md), so unknown fields are ignored and missing ones tolerated.
+type apiSession struct {
+	SessionID           string `json:"SessionID"`
+	Name                string `json:"Name"`
+	GuestMachineName    string `json:"GuestMachineName"`
+	GuestConnectedCount int    `json:"GuestConnectedCount"`
+}
+
+// Collect implements community.Collector: it polls ScreenConnect for current sessions and maps each to a
+// remote_access coverage reading keyed by the session name (which is the Fleet hostname, since we set
+// t=<hostname> at install). A connected guest ⇒ protected; a known-but-offline session ⇒ at_risk. Returns
+// nil (no-op) when polling isn't configured (no AccessSecret/APIPath) so a deployment-only instance is
+// valid. It performs no DB access — the community Runner resolves hostnames to hosts and persists.
+func (p *Provider) Collect(ctx context.Context) ([]community.HostStatusReport, error) {
+	if p.cfg.AccessSecret == "" || p.cfg.APIPath == "" {
+		return nil, nil
+	}
+	sessions, err := p.getSessions(ctx)
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "screenconnect collect sessions")
+	}
+	reports := make([]community.HostStatusReport, 0, len(sessions))
+	for _, s := range sessions {
+		name := s.Name
+		if name == "" {
+			name = s.GuestMachineName
+		}
+		if name == "" {
+			continue // no host key to resolve against
+		}
+		state := fleet.IntegrationStateAtRisk
+		detail := "no guest connected"
+		if s.GuestConnectedCount > 0 {
+			state = fleet.IntegrationStateProtected
+			detail = "guest connected"
+		}
+		reports = append(reports, community.HostStatusReport{
+			Identifier:     name,
+			IdentifierKind: community.IdentifierHostname,
+			Category:       fleet.IntegrationCategoryRemoteAccess,
+			State:          state,
+			Detail:         detail,
+		})
+	}
+	return reports, nil
+}
+
+// getSessions calls the RESTful API Manager session-list method (POST JSON, shared secret in the
+// CTRLAuthHeader header) and returns the parsed sessions.
+func (p *Provider) getSessions(ctx context.Context) ([]apiSession, error) {
+	endpoint := strings.TrimRight(p.cfg.InstanceURL, "/") + p.cfg.APIPath
+	// Empty JSON filter = all sessions; the server groups by custom property, so a bulk call is correct
+	// (see human/setup/screenconnect.md — poll on the order of minutes, one bulk call, not per host).
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader("[]"))
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "build request")
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("CTRLAuthHeader", p.cfg.AccessSecret)
+
+	client := fleethttp.NewClient(fleethttp.WithTimeout(30 * time.Second))
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "do request")
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, ctxerr.Errorf(ctx, "screenconnect api status %d", resp.StatusCode)
+	}
+	var sessions []apiSession
+	if err := json.NewDecoder(resp.Body).Decode(&sessions); err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "decode sessions")
+	}
+	return sessions, nil
 }

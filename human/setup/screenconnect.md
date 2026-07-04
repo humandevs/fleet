@@ -56,6 +56,27 @@ or session name. Derive:
 Persist a per-host `remote_access` status row keyed by the stored **SessionID** (preferred) → hostname.
 Poll on the order of **minutes**, one bulk `GetSessions` call, not per-host.
 
+## Group provisioning (Fleet clients/sites → ScreenConnect groups)
+
+Two separate mechanisms, don't conflate them:
+- **Routing (device → group)** happens entirely via the installer's `&c=` values. `CustomProperty1..8` are
+  positional; by convention **CustomProperty1 = client** (the group key), **CustomProperty2 = site**, then
+  department / device type. Set them per host at install (`screenconnect.OrgLink`); nothing server-side is
+  required for the device to carry the tags.
+- **Grouping (UI view)** is a saved **session-group filter** (e.g. `CustomProperty1 = 'Acme'`) that must
+  exist for the ScreenConnect UI to *show* those tagged devices as a group. This is what we'd "push" when a
+  Fleet client/site is created.
+
+**Push-on-create design.** Hook the Fleet client (team) / site create+rename lifecycle → call
+`screenconnect.Provider.EnsureSessionGroup(ctx, client, sites...)`, which idempotently ensures a group
+filtered on `CustomProperty1 = '<client>'` (+ a child group per site adding `CustomProperty2 = '<site>'`).
+
+> Confidence: **low** for programmatic group CRUD. The RESTful API Manager exposes session read/command
+> methods, but session-**group** management is an admin/config surface. Preference order: **(1)** a supported
+> RESTful API Manager method if the installed extension exposes SessionGroup CRUD; **(2)** since we
+> self-host, manage the server config directly (write `SessionGroup` elements); **(3)** internal page
+> service (version-fragile) only as a last resort. `EnsureSessionGroup` is a wired seam (no-op) today.
+
 ## Connect button (deep link)
 ```
 https://<instance>/Host#Access/<GroupName>//<SessionID>/Join
@@ -68,7 +89,14 @@ needs an authenticated ScreenConnect Host browser session (first click prompts S
   host's team (client) + site into `&c=` and `t=<hostname>`.
 - **Status** = cron poller → `host_integration_status.remote_access` (the [PLUGINS.md](../PLUGINS.md)
   `HostStatusProvider` pattern).
-- **Config** = ScreenConnect base URL + `CTRLAuthHeader` secret in `AppConfig.Integrations`.
+- **Config** = ScreenConnect **base URL** (`InstanceURL` — required; self-hosted has no `*.screenconnect.com`
+  default) + `CTRLAuthHeader` secret in `AppConfig.Integrations`.
+  - **Self-hosted, standard:** point `InstanceURL` at your own server (e.g. `https://remote.example.com` or
+    `https://example.com:8040`). The per-org installer downloaded from it bakes in that server's relay
+    address + cert thumbprint + join key, so nothing else is needed.
+  - **Self-hosted, reverse-proxied (web on 443, relay on host:8041):** an installer pulled through the 443
+    proxy would bake in the *proxy* as its relay. Override the phone-home endpoint with `RelayHost` +
+    `RelayPort` (installer `h=`/`p=`) and, for a self-signed cert, `Thumbprint` (installer `k=`).
 - **UI** = "Remote Access" coverage-matrix icon + a "Connect" button opening the Join link.
 
 ## Gotchas
