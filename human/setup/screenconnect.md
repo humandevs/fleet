@@ -48,6 +48,13 @@ the screen** until TCC/PPPC grants exist. **Push a PPPC/TCC config profile via F
 Screen Recording + Full Disk Access) *before/with* the install, or the deploy looks successful but is inert.
 
 ## Status poller (coverage-matrix "Remote Access" signal)
+
+> **Implemented.** `screenconnect.Provider.Collect` (a community `Collector`) polls the RESTful API Manager
+> and returns `remote_access` reports keyed by session name (= the Fleet hostname we set via `t=` at
+> install); the community `Runner` resolves them to hosts and upserts cells. Config it with `AccessSecret`
+> (the `CTRLAuthHeader` secret) + `APIPath` (your installed extension's session-list method path —
+> instance-specific, so it's configured not hardcoded). Leave both empty for deployment-only mode.
+
 A Go cron calls the RESTful API Manager (`GetSessionsByFilter`, header `CTRLAuthHeader`) — or, fallback,
 `POST /Services/PageService.ashx/GetHostSessionInfo` (Basic auth) — filtered by the site custom property
 or session name. Derive:

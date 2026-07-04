@@ -1,9 +1,12 @@
 package screenconnect
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/fleetdm/fleet/v4/server/community"
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/stretchr/testify/require"
 )
@@ -33,6 +36,52 @@ func TestInstallerURLCustomProperties(t *testing.T) {
 	got = p.InstallerURL("h1", OrgLink{CustomProperties: []string{"1", "2", "3", "4", "5", "6", "7", "8", "9"}})
 	require.Contains(t, got, "&c=8")
 	require.NotContains(t, got, "&c=9")
+}
+
+func TestCollectMapsSessionsToRemoteAccess(t *testing.T) {
+	var gotSecret, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotSecret = r.Header.Get("CTRLAuthHeader")
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[
+			{"SessionID":"g1","Name":"DESKTOP-01","GuestConnectedCount":1},
+			{"SessionID":"g2","Name":"DESKTOP-02","GuestConnectedCount":0},
+			{"SessionID":"g3","GuestMachineName":"DESKTOP-03","GuestConnectedCount":0},
+			{"SessionID":"g4","GuestConnectedCount":1}
+		]`))
+	}))
+	defer srv.Close()
+
+	p := New(Config{
+		InstanceURL:  srv.URL,
+		AccessSecret: "s3cr3t",
+		APIPath:      "/App_Extensions/abc/Service.ashx/GetSessionsByFilter",
+	})
+	reports, err := p.Collect(t.Context())
+	require.NoError(t, err)
+
+	require.Equal(t, "s3cr3t", gotSecret)
+	require.Equal(t, "/App_Extensions/abc/Service.ashx/GetSessionsByFilter", gotPath)
+
+	// g4 has no name/machine-name → dropped (no host key). The other three map by hostname.
+	require.Len(t, reports, 3)
+	for _, r := range reports {
+		require.Equal(t, community.IdentifierHostname, r.IdentifierKind)
+		require.Equal(t, fleet.IntegrationCategoryRemoteAccess, r.Category)
+	}
+	require.Equal(t, "DESKTOP-01", reports[0].Identifier)
+	require.Equal(t, fleet.IntegrationStateProtected, reports[0].State) // connected guest
+	require.Equal(t, "DESKTOP-02", reports[1].Identifier)
+	require.Equal(t, fleet.IntegrationStateAtRisk, reports[1].State) // known but offline
+	require.Equal(t, "DESKTOP-03", reports[2].Identifier)            // falls back to GuestMachineName
+}
+
+func TestCollectNoopWithoutPolling(t *testing.T) {
+	// Deployment-only instance (no API secret/path) is valid: Collect returns nothing, no HTTP call.
+	reports, err := New(Config{InstanceURL: "https://x"}).Collect(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, reports)
 }
 
 func TestEnsureSessionGroupSeam(t *testing.T) {

@@ -73,7 +73,7 @@ func TestRunnerUsesHostByUUIDForUUIDKind(t *testing.T) {
 		require.Equal(t, "ABC-UUID", uuid)
 		return &fleet.Host{ID: 3}, nil
 	}
-	ds.SetOrUpdateHostIntegrationStatusFunc = func(_ context.Context, *fleet.HostIntegrationStatus) error { return nil }
+	ds.SetOrUpdateHostIntegrationStatusFunc = func(_ context.Context, _ *fleet.HostIntegrationStatus) error { return nil }
 
 	reg := NewRegistry()
 	reg.RegisterHostStatusProvider(&fakeProvider{
@@ -87,7 +87,7 @@ func TestRunnerUsesHostByUUIDForUUIDKind(t *testing.T) {
 
 func TestRunnerSkipsProviderOnCollectError(t *testing.T) {
 	ds := new(mock.DataStore)
-	ds.SetOrUpdateHostIntegrationStatusFunc = func(_ context.Context, *fleet.HostIntegrationStatus) error { return nil }
+	ds.SetOrUpdateHostIntegrationStatusFunc = func(_ context.Context, _ *fleet.HostIntegrationStatus) error { return nil }
 
 	reg := NewRegistry()
 	reg.RegisterHostStatusProvider(&fakeProvider{source: "boom", err: errors.New("api down")})
