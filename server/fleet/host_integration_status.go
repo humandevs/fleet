@@ -12,6 +12,7 @@ const (
 	IntegrationCategoryRemoteAccess   IntegrationCategory = "remote_access"
 	IntegrationCategoryBackups        IntegrationCategory = "backups"
 	IntegrationCategoryDiskEncryption IntegrationCategory = "disk_encryption"
+	IntegrationCategoryPatching       IntegrationCategory = "patching"
 )
 
 // IntegrationState is the normalized per-cell coverage value. Kept intentionally small so the
@@ -40,6 +41,33 @@ type HostIntegrationStatus struct {
 	// Stale is set at read time when the row is older than the category's freshness TTL; when true,
 	// State is forced to "unknown" so the matrix never renders stale data as covered.
 	Stale bool `json:"stale" db:"-"`
+}
+
+// CoverageStatePredicate is an exact (category, state) match used by CoverageFilter.
+type CoverageStatePredicate struct {
+	Category IntegrationCategory
+	State    IntegrationState
+}
+
+// CoverageFilter selects hosts by their host_integration_status coverage, powering N-able-style saved
+// views ("only hosts with problems", "only hosts missing Managed AV"). Set predicates are AND-combined.
+// Freshness is applied in SQL (mirroring the read-path per-category TTL) so a stale "protected" cell is
+// treated as a coverage gap, not as covered. Expectations for MissingCategories come from the host's
+// bundle in the full design (human/RFC-coverage-dashboards-and-bundles.md §7).
+type CoverageFilter struct {
+	// Problems matches hosts with ANY effectively-non-protected cell (state != protected, OR a cell that
+	// has gone stale past its category TTL).
+	Problems bool
+	// MissingCategories matches hosts lacking a fresh "protected" cell for EACH listed category.
+	MissingCategories []IntegrationCategory
+	// StatePredicates matches hosts having a fresh cell for EACH exact (category, state) pair. A state of
+	// "unknown" also matches cells that are stale past their TTL.
+	StatePredicates []CoverageStatePredicate
+}
+
+// IsZero reports whether the filter selects nothing (no coverage constraint set).
+func (f CoverageFilter) IsZero() bool {
+	return !f.Problems && len(f.MissingCategories) == 0 && len(f.StatePredicates) == 0
 }
 
 // AggregatedIntegrationStatus is a fleet-wide (optionally team-scoped) rollup of coverage cells,

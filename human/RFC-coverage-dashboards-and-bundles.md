@@ -40,15 +40,22 @@ permissively licensed (Apache-2.0), © Human-ISM. They **do not require Fleet EE
 
 ## 3. What is upstream vs fork-side
 
+> **Revised after studying Fleet's process (see [UPSTREAM-STRATEGY.md](./UPSTREAM-STRATEGY.md)).** Fleet
+> rejected OpenSpec (ADR-0010) for adding review surface + maintenance with *no in-tree consumer*. An
+> exported provider interface + Runner with zero in-tree producers hits that same objection — so the
+> **ingestion seam is fork-side**. Only the normalized **data** seam (table + read/write + dashboard +
+> filter) is upstream-candidate: third parties write to it out-of-band; the interface/registry/runner are
+> ours.
+
 | Piece | Home | Rationale |
 |---|---|---|
-| `host_integration_status` table + types + read API | **Upstream (MIT)** | Generic "Munki, but for any coverage vendor". *Merged.* |
-| `HostStatusProvider` / `Collector` interface + `Runner` | **Upstream (MIT)** | Vendor-agnostic ingestion seam; no vendor code. |
-| Coverage-matrix dashboard + `ColumnSpec` (icons/labels) | **Upstream (MIT)** | Renders normalized cells; no vendor knowledge. |
-| Status filtering (host list by coverage) | **Upstream (MIT)** | Query over the generic table. |
-| Config-inheritance resolver (merge global→client→site) | **Upstream candidate (MIT)** | Generic tree-merge; useful beyond us. Pitch carefully — may land fork-side first. |
+| `host_integration_status` table + types + read/write API | **Upstream (MIT)** | Generic "Munki, but for any coverage vendor" — a data store with an in-tree consumer (the host card). *Merged.* |
+| Coverage-matrix card + `ColumnSpec` (icons/labels) | **Upstream (MIT)** | Renders normalized cells; concrete UI feature, no vendor knowledge. |
+| Host-list coverage filter (`ListHostsByCoverage`) | **Upstream (MIT)** | Concrete "filter hosts by coverage" feature over the table. |
+| `HostStatusProvider`/`Collector` + `Runner` + registry | **Fork (Apache-2.0)** | Ingestion seam has no in-tree producer → speculative framework upstream. Writes via the upstream `SetOrUpdate…` method. |
 | ScreenConnect / Bitdefender / Action1 / Veeam / iDrive360 plugins | **Fork (Apache-2.0)** | Vendor-specific; our contribution to *demonstrate* the seams. |
-| *Standard MSP* bundle catalog + policies | **Fork (private)** | Our commercial packaging. |
+| Dashboards-as-plugins, Views/Triggers engines, bundles, Org tree | **Fork** | Framework/product layers; not minimal in-tree features. |
+| `team.parent_id` (subteams primitive) | **Upstream candidate (ADR)** | *If* pitched as one small nullable column; high-risk, propose via ADR. Else fork-side Org tree. |
 
 ## 4. Provider model (built)
 
@@ -120,29 +127,27 @@ GET /api/latest/fleet/hosts?integration_category=av&integration_state=not_instal
 GET /api/latest/fleet/hosts?coverage=missing:av,mdr        # not "protected" in any listed category
 ```
 
-**Filter model:**
+**Filter model (built — `fleet.CoverageFilter`):**
 
 ```go
 type CoverageFilter struct {
-    // Any of these categories in a non-protected state (staleness applied) → "problem".
-    ProblemCategories []IntegrationCategory
-    // Exact (category,state) predicates, AND-combined with the above when both set.
-    Predicates []struct{ Category IntegrationCategory; State IntegrationState }
-    // MissingCategories: host is missing coverage (no protected cell) for ALL listed categories.
-    MissingCategories []IntegrationCategory
+    Problems          bool                     // any effectively-non-protected cell (wrong state OR stale)
+    MissingCategories []IntegrationCategory    // no fresh "protected" cell for EACH listed category
+    StatePredicates   []CoverageStatePredicate // exact (category,state); "unknown" also matches stale
 }
 ```
 
-**SQL shape (anti-join / EXISTS, staleness-aware):** a host matches "missing AV" when **no** fresh
-`host_integration_status` row exists with `category='av' AND state='protected' AND updated_at > now - ttl`.
-"Problems" = `EXISTS` a fresh row in (`at_risk`,`not_installed`) **or** `NOT EXISTS` a fresh `protected`
-row for an expected category. Freshness must be applied **in SQL** (mirror the read-path TTL) so a stale
-"protected" doesn't hide a real gap — this is the one subtlety; see
-[RISK-REGISTER.md](./RISK-REGISTER.md) #3. Expected categories come from the host's **bundle** (§7): a host
-whose bundle includes Managed AV but has no fresh protected AV cell is the canonical "missing AV" row.
+**SQL shape (anti-join / EXISTS, staleness-aware) — built & unit-tested (`coverageFilterConds`):** a host
+matches "missing AV" when **no** fresh `host_integration_status` row exists with
+`category='av' AND state='protected' AND <fresh>`. "Problems" = `EXISTS` a cell that is non-protected **or**
+stale. Freshness is applied **in SQL** via a constant per-category-TTL `CASE` (mirrors the read-path gate),
+so a stale "protected" can't hide a real gap — the one subtlety; see [RISK-REGISTER.md](./RISK-REGISTER.md)
+\#3. Expected categories for "missing" ultimately come from the host's **bundle** (§7).
 
-*Implementation note:* new datastore method `ListHostsByCoverage(ctx, filter, opts)` + host-list wiring +
-mock regen. Order-key allowlist for sorting. Staged (needs `MYSQL_TEST` round-trip).
+*Built:* `fleet.CoverageFilter` + `coverageFilterConds` (pure SQL builder, unit-tested) +
+`Datastore.ListHostsByCoverage` (returns matching host IDs). *Staged:* promote to the `fleet.Datastore`
+interface, hydrate/paginate through the standard host list (order-key allowlist), and a `MYSQL_TEST`
+round-trip — done alongside the frontend so it's verified end-to-end.
 
 ## 7. Integration bundles + inheritance
 
@@ -235,14 +240,90 @@ target — provisioning the client/site group when a bundle is assigned.
 | 1 | `host_integration_status` table + read API + freshness gate | ✅ built (upstream PR drafted) |
 | 2 | `HostStatusProvider`/`Collector` + `Runner` (+ tests) | ✅ built |
 | 3 | ScreenConnect plugin — deploy + functional `Collect` (+ httptest) | ✅ built |
-| 4 | Bitdefender GravityZone `Collect` (`av`+`mdr`) | ⏳ next |
-| 5 | Action1 (patching) + Veeam/iDrive360 (`backups`) | ⏳ next |
-| 6 | `ColumnSpec` + frontend coverage matrix | ⏳ next |
-| 7 | `ListHostsByCoverage` + host-list filter wiring (+ mock regen) | ⏳ next |
-| 8 | `ResolveBundle` resolver (pure) + tests | ⏳ next |
-| 9 | Bundle → Fleet team/GitOps compiler + `Applier` seam | ⏳ later |
+| 4 | Bitdefender GravityZone `Collect` (`av`+`mdr`, JSON-RPC, + httptest) | ✅ built |
+| 5 | Action1 — agent deploy + patch monitoring/staleness `Collect` (`patching`, + httptest) | ✅ built |
+| 6 | `CoverageFilter` + `coverageFilterConds` (freshness-aware SQL) + `ListHostsByCoverage` | ✅ built (endpoint wiring staged) |
+| 7 | Veeam / iDrive360 `Collect` (`backups`) | ⏳ next |
+| 8 | `ColumnSpec` + frontend coverage matrix + filter UI | ⏳ next |
+| 9 | Client/site substrate (§11) + `ResolveBundle` resolver | ⏳ next |
+| 10 | Bundle → Fleet team/GitOps compiler + `Applier` seam | ⏳ later |
+| 11 | Views/Triggers automation engine (§10) | ⏳ later |
 
-**PR sequencing (upstream):** land #1 (drafted) → #2 (interface+runner, no vendor code) → #6 dashboard →
-#7 filtering → optionally #8 resolver. Vendor plugins (#3–#5) ship on our GitHub, not upstream. Each
-upstream PR is framed as a user-facing feature with one real consumer + tests — never as "a plugin system"
-([PLUGINS.md §4.3](./PLUGINS.md)).
+**PR sequencing (upstream):** land #1 (drafted) → #2 (interface+runner, no vendor code) → #8 dashboard →
+#6 filtering → optionally the §7 resolver. Vendor plugins (#3–#5, #7) ship on our GitHub, not upstream.
+Each upstream PR is framed as a user-facing feature with one real consumer + tests — never as "a plugin
+system" ([PLUGINS.md §4.3](./PLUGINS.md)).
+
+## 10. Views + Triggers automation engine (pluggable)
+
+A Zendesk-style split, deliberately **loosely coupled so multiple engines can coexist** (built-in, Zapier,
+n8n, …) — the coverage data and the automation are separate concerns joined only by events + a filter DSL.
+
+- **Views = saved filters.** A `View` is a named predicate over hosts/coverage (superset of
+  `CoverageFilter`: coverage cells + host facts + labels/teams). Views back both dashboard tabs and Trigger
+  scoping. Reused, not reinvented, by every engine.
+- **Triggers = event → (View gate) → action.** A `Trigger` fires on an **event** (coverage cell changed,
+  went at_risk, N hours stale, patch deploy failed), is **gated by a View** (only Acme HQ; only `patching`
+  at_risk), and runs an **action**. "Views filter Triggers" = the View is the trigger's precondition.
+
+**Loose coupling — the seam is an event bus + an action interface, not a hardcoded engine:**
+
+```go
+// The Runner (and other writers) emit typed events after a cell changes.
+type CoverageEvent struct {
+    HostID uint; Source string; Category IntegrationCategory
+    Old, New IntegrationState; At time.Time
+}
+
+// An automation engine is a community plugin: it subscribes, applies its own View gating, and acts.
+type AutomationEngine interface {
+    Name() string
+    HandleEvent(ctx context.Context, ev CoverageEvent) error
+}
+```
+
+Engines register like host-status providers. Built-in engine = View-gated Triggers with actions
+(create Fleet activity/alert, run a script, call a plugin `Applier` to auto-repair — e.g. Action1
+redeploy on `patching→not_installed`). **Zapier/n8n engines** = thin `AutomationEngine`s that POST the
+event to an outbound webhook (Zapier catch hook / n8n webhook node), letting the low-code tool own the
+View/Trigger logic. Because the contract is just `HandleEvent`, we can run the built-in engine **and**
+n8n **and** Zapier simultaneously, or swap them per instance/client — no core change. Delivery is
+at-least-once with idempotency keys; a slow/broken engine is isolated (same blast-radius rule as §8).
+
+*This is where Action1's "alert if no successes recently / repair if needed" lives:* the Collector emits
+the `at_risk` state + detail (§built); a Trigger gated by a "patching at_risk > 24h" View fires the alert
+and/or the auto-repair `Applier`.
+
+## 11. Client/site organization (team/subteam substrate)
+
+The bundle hierarchy (§7) needs a home for "Client" and "Site". Fleet teams are **flat** (no nesting), so:
+
+- **Model:** an `Org` tree fork-side — `Client` (has many `Site`s), each `Site` maps 1:1 to a **Fleet team**
+  (the execution substrate we already have). A `Client` is a grouping + the mid-level bundle node; it is
+  **not** itself a team. Hosts live in a Site→team.
+- **Why not real subteams in Fleet core?** True nested teams touch authz, GitOps, and the team model
+  broadly — high-risk, low merge-odds upstream. Mapping Site→team keeps us on Fleet's supported substrate
+  and lets bundles **compile down** (§7.4) to per-team config. We get hierarchy + inheritance without
+  forking the team model.
+- **Authz/tenancy:** a Client scopes its Sites; a Client-admin role sees only its Sites' teams. Cross-client
+  references rejected at resolve. Reuses Fleet's team-based authorization underneath.
+- **Upstream angle:** propose an optional `team.parent_id` (nullable) as the *minimal* core primitive that
+  would let this be native; if declined, the fork-side `Org` tree stands on its own. Pitch small.
+
+## 12. Dashboards / matrixes as plugins
+
+Beyond the built-in coverage matrix, per-client/per-instance **custom dashboards** are themselves plugins,
+so we can ship bespoke boards without core changes:
+
+```go
+type DashboardPlugin interface {
+    Key() string                              // "coverage-matrix", "acme-exec-summary"
+    Definition(ctx context.Context) (DashboardDef, error) // panels, each backed by a View (§10) + a viz kind
+}
+```
+
+A `DashboardDef` is data (panels = View + visualization kind: matrix / count / list / timeseries), rendered
+by a generic frontend renderer — so a new board is a registered plugin + a View, not a React deploy. This
+composes with §10 (panels are Views) and §11 (a board can be scoped per Client/Site). The built-in coverage
+matrix is just the first `DashboardPlugin`. Custom per-client boards and Zapier/n8n-driven ones layer on
+without touching core.

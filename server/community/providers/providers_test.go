@@ -17,7 +17,7 @@ func TestRegister(t *testing.T) {
 		sources = append(sources, p.Source())
 	}
 	require.ElementsMatch(t,
-		[]string{"screenconnect", "bitdefender", "huntress", "veeam", "idrive360", "warp"},
+		[]string{"screenconnect", "bitdefender", "action1", "huntress", "veeam", "idrive360", "warp"},
 		sources,
 	)
 }

@@ -1,0 +1,12 @@
+{
+  "name": "fleet-verify",
+  "private": true,
+  "type": "module",
+  "description": "Puppeteer verification harness for our Fleet fork — logs in and screenshots the UI (host list today; the coverage matrix + coverage filter once built). Runs on the Windows host against a Fleet server in a Hyper-V VM.",
+  "scripts": {
+    "smoke": "node fleet-smoke.mjs"
+  },
+  "devDependencies": {
+    "puppeteer": "^24.10.0"
+  }
+}
