@@ -1,0 +1,21 @@
+# Managed by Ansible.
+[Unit]
+Description=Fleet (Human-ISM fork)
+After=network-online.target redis.service
+Wants=network-online.target
+
+[Service]
+User=fleet
+Group=fleet
+EnvironmentFile={{ fleet_config_dir }}/fleet.env
+ExecStart={{ fleet_bin }} serve
+Restart=on-failure
+RestartSec=5
+# Fleet is stateless on disk; keep it locked down.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths={{ fleet_config_dir }}
+
+[Install]
+WantedBy=multi-user.target

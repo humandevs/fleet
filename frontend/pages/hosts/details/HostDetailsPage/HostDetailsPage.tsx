@@ -347,7 +347,10 @@ const HostDetailsPage = ({
   );
 
   // Community-plugin coverage cells (AV/MDR/patching/remote access/backups/disk encryption).
-  const { data: integrationStatus } = useQuery(
+  const {
+    data: integrationStatus,
+    isLoading: isLoadingIntegrationStatus,
+  } = useQuery(
     ["integrationStatus", hostIdFromURL],
     () => hostAPI.getIntegrationStatus(hostIdFromURL),
     {
@@ -1491,10 +1494,11 @@ const HostDetailsPage = ({
                   toggleLocationModal={toggleLocationModal}
                   toggleMDMStatusModal={toggleMDMStatusModal}
                 />
-                {integrationStatus && integrationStatus.length > 0 && (
+                {(isLoadingIntegrationStatus ||
+                  (integrationStatus && integrationStatus.length > 0)) && (
                   <IntegrationStatusCard
                     className={fullWidthCardClass}
-                    isLoading={isLoadingHost}
+                    isLoading={isLoadingIntegrationStatus}
                     data={integrationStatus}
                   />
                 )}

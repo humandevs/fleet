@@ -1,0 +1,74 @@
+---
+# Base OS: packages, firewall, and the Go + Node toolchain needed to build our fork.
+# Written for Rocky/RHEL 9 (dnf). For Debian, swap the package tasks for apt equivalents.
+
+- name: Install base packages
+  ansible.builtin.dnf:
+    name:
+      - git
+      - make
+      - gcc
+      - tar
+      - openssl
+      - firewalld
+    state: present
+
+- name: Enable firewalld
+  ansible.builtin.systemd:
+    name: firewalld
+    enabled: true
+    state: started
+
+- name: Open the Fleet server port
+  ansible.posix.firewalld:
+    port: 8080/tcp
+    permanent: true
+    immediate: true
+    state: enabled
+
+# --- Go toolchain (pinned) ---
+- name: Check installed Go version
+  ansible.builtin.command: /usr/local/go/bin/go version
+  register: go_installed
+  changed_when: false
+  failed_when: false
+
+- name: Install Go {{ go_version }}
+  when: go_version not in (go_installed.stdout | default(''))
+  block:
+    - name: Download Go tarball
+      ansible.builtin.get_url:
+        url: "https://go.dev/dl/go{{ go_version }}.linux-amd64.tar.gz"
+        dest: "/tmp/go{{ go_version }}.tar.gz"
+        mode: "0644"
+    - name: Remove any previous Go
+      ansible.builtin.file:
+        path: /usr/local/go
+        state: absent
+    - name: Extract Go to /usr/local
+      ansible.builtin.unarchive:
+        src: "/tmp/go{{ go_version }}.tar.gz"
+        dest: /usr/local
+        remote_src: true
+
+- name: Put Go on PATH for all users
+  ansible.builtin.copy:
+    dest: /etc/profile.d/go.sh
+    mode: "0644"
+    content: "export PATH=$PATH:/usr/local/go/bin\n"
+
+# --- Node (for building the frontend assets) ---
+- name: Add NodeSource repo
+  ansible.builtin.shell: |
+    curl -fsSL https://rpm.nodesource.com/setup_{{ node_version }}.x | bash -
+  args:
+    creates: /etc/yum.repos.d/nodesource-nodejs.repo
+
+- name: Install Node.js
+  ansible.builtin.dnf:
+    name: nodejs
+    state: present
+
+- name: Enable corepack (yarn)
+  ansible.builtin.command: corepack enable
+  changed_when: false

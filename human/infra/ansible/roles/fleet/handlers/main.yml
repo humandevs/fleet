@@ -1,0 +1,8 @@
+---
+- name: restart fleet
+  ansible.builtin.systemd:
+    name: fleet
+    state: restarted
+    daemon_reload: true
+  # Only bounce the service where it's meant to run (the DR spare stays stopped).
+  when: fleet_service_state == "started"

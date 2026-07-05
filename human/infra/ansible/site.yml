@@ -1,0 +1,11 @@
+---
+# Provision a Fleet instance VM: base + toolchain, Redis, then build/run our fork against external MySQL.
+# Same play for prod and the DR spare; group_vars differ (fleet_service_state / fleet_run_migrations).
+- name: Provision Fleet instance
+  hosts: fleet
+  vars_files:
+    - group_vars/vault.yml
+  roles:
+    - common   # base packages, firewalld, Go + Node toolchain
+    - redis     # local ephemeral Redis
+    - fleet     # clone fork, build, TLS, migrations, systemd service

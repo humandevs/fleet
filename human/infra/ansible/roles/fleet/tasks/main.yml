@@ -1,0 +1,102 @@
+---
+# Build our fork, configure TLS + env, run migrations (active writer only), install the systemd service.
+
+- name: Create fleet system user
+  ansible.builtin.user:
+    name: fleet
+    system: true
+    shell: /sbin/nologin
+    home: "{{ fleet_config_dir }}"
+    create_home: false
+
+- name: Create config + TLS dirs
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: fleet
+    group: fleet
+    mode: "0750"
+  loop:
+    - "{{ fleet_config_dir }}"
+    - "{{ fleet_tls_dir }}"
+
+# --- Source + build ---
+- name: Clone/update our fork
+  ansible.builtin.git:
+    repo: "{{ fleet_repo_url }}"
+    dest: "{{ fleet_src_dir }}"
+    version: "{{ fleet_repo_branch }}"
+    force: true
+  register: fleet_checkout
+
+- name: Build fleet (deps + frontend assets + binary)
+  ansible.builtin.shell: |
+    set -e
+    export PATH=$PATH:/usr/local/go/bin
+    make deps
+    make generate
+    make build
+  args:
+    chdir: "{{ fleet_src_dir }}"
+  when: fleet_checkout.changed
+  # generate (not generate-dev) bundles assets so the server runs without webpack watch.
+
+- name: Install the fleet binary
+  ansible.builtin.copy:
+    src: "{{ fleet_src_dir }}/build/fleet"
+    dest: "{{ fleet_bin }}"
+    remote_src: true
+    mode: "0755"
+  when: fleet_checkout.changed
+
+# --- Self-signed TLS (internal instance; front with a real cert/proxy for production) ---
+- name: Generate self-signed TLS cert
+  ansible.builtin.command: >
+    openssl req -x509 -newkey rsa:2048 -nodes
+    -keyout {{ fleet_tls_dir }}/fleet.key
+    -out {{ fleet_tls_dir }}/fleet.crt
+    -days 825 -subj "/CN={{ ansible_host }}"
+  args:
+    creates: "{{ fleet_tls_dir }}/fleet.crt"
+
+- name: Secure TLS files
+  ansible.builtin.file:
+    path: "{{ fleet_tls_dir }}"
+    owner: fleet
+    group: fleet
+    recurse: true
+
+# --- Config env (secrets from vault) ---
+- name: Write fleet.env
+  ansible.builtin.template:
+    src: fleet.env.j2
+    dest: "{{ fleet_config_dir }}/fleet.env"
+    owner: fleet
+    group: fleet
+    mode: "0640"
+  notify: restart fleet
+
+- name: Install systemd unit
+  ansible.builtin.template:
+    src: fleet.service.j2
+    dest: /etc/systemd/system/fleet.service
+    mode: "0644"
+  notify: restart fleet
+
+# --- Migrations: only the active writer runs them (DR spare gets fleet_run_migrations=false) ---
+- name: Run DB migrations
+  ansible.builtin.command: "{{ fleet_bin }} prepare db --no-prompt"
+  environment:
+    FLEET_MYSQL_ADDRESS: "{{ fleet_mysql_address }}"
+    FLEET_MYSQL_DATABASE: "{{ fleet_mysql_database }}"
+    FLEET_MYSQL_USERNAME: "{{ fleet_mysql_username }}"
+    FLEET_MYSQL_PASSWORD: "{{ fleet_mysql_password }}"
+  when: fleet_run_migrations | bool
+  changed_when: true
+
+- name: Enable + set service state
+  ansible.builtin.systemd:
+    name: fleet
+    enabled: true
+    state: "{{ fleet_service_state }}"
+    daemon_reload: true

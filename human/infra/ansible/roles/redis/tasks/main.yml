@@ -1,0 +1,19 @@
+---
+# Local Redis — ephemeral live-query/cache layer, bound to localhost. Not a source of truth.
+- name: Install Redis
+  ansible.builtin.dnf:
+    name: redis
+    state: present
+
+- name: Bind Redis to localhost only
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "^bind "
+    line: "bind 127.0.0.1 -::1"
+  notify: restart redis
+
+- name: Enable and start Redis
+  ansible.builtin.systemd:
+    name: redis
+    enabled: true
+    state: started

@@ -18,6 +18,7 @@ import { mkdir } from "node:fs/promises";
 const URL = process.env.FLEET_URL ?? "https://localhost:8080";
 const USER = process.env.FLEET_USER ?? "admin@example.com";
 const PASS = process.env.FLEET_PASS ?? "Fleet1234!";
+const HOST_ID = process.env.FLEET_HOST_ID ?? "1"; // a host to open for the Coverage card
 const OUT = "screenshots";
 
 async function shot(page, name) {
@@ -54,6 +55,11 @@ async function main() {
 
     await page.goto(`${URL}/hosts/manage`, { waitUntil: "networkidle2", timeout: 30000 });
     await shot(page, "03-hosts");
+
+    // Host details → the Coverage card lives in the Details tab (renders only if a provider has reported
+    // cells for this host; run a provider Collect first, or seed host_integration_status).
+    await page.goto(`${URL}/hosts/${HOST_ID}`, { waitUntil: "networkidle2", timeout: 30000 });
+    await shot(page, "04-host-details-coverage");
 
     console.log("✅ smoke complete");
   } catch (err) {

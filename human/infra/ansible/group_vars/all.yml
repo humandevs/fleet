@@ -1,0 +1,30 @@
+# Non-secret config shared by all Fleet VMs. Secrets live in vault.yml (encrypted) — see README §Secrets.
+
+# --- Versions (pin so prod and DR never drift) ---
+go_version: "1.26.4"
+node_version: "24"
+
+# --- Our fork ---
+fleet_repo_url: "https://github.com/REPLACE_WITH_YOUR_FORK/fleet.git"
+fleet_repo_branch: "human-dev"
+fleet_src_dir: "/opt/fleet-src"      # where the fork is cloned + built
+fleet_bin: "/usr/local/bin/fleet"    # installed binary
+
+# --- External MySQL (the box on your LAN) ---
+# Fleet is MySQL-only (8.0.36+, NOT MariaDB/Postgres). The VM does NOT run MySQL; it points here.
+fleet_mysql_address: "REPLACE_WITH_LAN_MYSQL_IP:3306"
+fleet_mysql_database: "fleet"
+fleet_mysql_username: "fleet"
+# fleet_mysql_password  -> vault.yml
+
+# --- Redis (runs locally on each VM; ephemeral, not source of truth) ---
+fleet_redis_address: "127.0.0.1:6379"
+
+# --- Server ---
+fleet_server_address: "0.0.0.0:8080"
+fleet_tls_dir: "/etc/fleet/tls"
+fleet_config_dir: "/etc/fleet"
+
+# --- DR flag: prod runs the service; the spare stays stopped until failover ---
+fleet_service_state: "started"   # overridden to "stopped" in group_vars for fleet_dr (see README)
+fleet_run_migrations: true       # only the active writer should run migrations
