@@ -862,6 +862,8 @@ type ListHostIntegrationStatusFunc func(ctx context.Context, hostID uint) ([]*fl
 
 type AggregatedHostIntegrationStatusFunc func(ctx context.Context, teamID *uint) ([]*fleet.AggregatedIntegrationStatus, error)
 
+type ListHostsByCoverageFunc func(ctx context.Context, filter fleet.CoverageFilter) ([]uint, error)
+
 type SetOrUpdateMDMDataFunc func(ctx context.Context, hostID uint, isServer bool, enrolled bool, serverURL string, installedFromDep bool, name string, fleetEnrollRef string, isPersonalEnrollment bool) error
 
 type UpdateMDMDataFunc func(ctx context.Context, hostID uint, enrolled bool) error
@@ -3379,6 +3381,9 @@ type DataStore struct {
 
 	AggregatedHostIntegrationStatusFunc        AggregatedHostIntegrationStatusFunc
 	AggregatedHostIntegrationStatusFuncInvoked bool
+
+	ListHostsByCoverageFunc        ListHostsByCoverageFunc
+	ListHostsByCoverageFuncInvoked bool
 
 	SetOrUpdateMDMDataFunc        SetOrUpdateMDMDataFunc
 	SetOrUpdateMDMDataFuncInvoked bool
@@ -8204,6 +8209,13 @@ func (s *DataStore) AggregatedHostIntegrationStatus(ctx context.Context, teamID 
 	s.AggregatedHostIntegrationStatusFuncInvoked = true
 	s.mu.Unlock()
 	return s.AggregatedHostIntegrationStatusFunc(ctx, teamID)
+}
+
+func (s *DataStore) ListHostsByCoverage(ctx context.Context, filter fleet.CoverageFilter) ([]uint, error) {
+	s.mu.Lock()
+	s.ListHostsByCoverageFuncInvoked = true
+	s.mu.Unlock()
+	return s.ListHostsByCoverageFunc(ctx, filter)
 }
 
 func (s *DataStore) SetOrUpdateMDMData(ctx context.Context, hostID uint, isServer bool, enrolled bool, serverURL string, installedFromDep bool, name string, fleetEnrollRef string, isPersonalEnrollment bool) error {

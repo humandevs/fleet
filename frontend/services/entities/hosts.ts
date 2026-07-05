@@ -25,6 +25,10 @@ import {
 import { IMunkiIssuesAggregate } from "interfaces/macadmins";
 import { PlatformValueOptions, PolicyResponse } from "utilities/constants";
 import { IHostCertificate } from "interfaces/certificates";
+import {
+  IHostIntegrationStatusResponse,
+  IHostsByCoverageResponse,
+} from "interfaces/integration_status";
 import { IListOptions } from "interfaces/list_options";
 
 import { ScriptBatchHostCountV1 } from "./scripts";
@@ -97,6 +101,7 @@ export const HOSTS_QUERY_PARAMS = {
   SOFTWARE_STATUS: "software_status",
   SCRIPT_BATCH_EXECUTION_STATUS: "script_batch_execution_status",
   SCRIPT_BATCH_EXECUTION_ID: "script_batch_execution_id",
+  COVERAGE: "coverage",
 } as const;
 
 export interface ILoadHostsQueryKey extends ILoadHostsOptions {
@@ -562,6 +567,30 @@ export default {
     const { HOSTS } = endpoints;
     const path = `${HOSTS}/${hostID}/${extension}`;
 
+    return sendRequest("GET", path);
+  },
+  // getIntegrationStatus fetches the community-plugin coverage cells for a host (AV/MDR/patching/remote
+  // access/backups/disk encryption). Feeds the host-details Coverage card.
+  getIntegrationStatus: (
+    hostID: number
+  ): Promise<IHostIntegrationStatusResponse> => {
+    const { HOST_INTEGRATION_STATUS } = endpoints;
+    return sendRequest("GET", HOST_INTEGRATION_STATUS(hostID));
+  },
+  // getHostsByCoverage returns the host IDs matching a coverage filter view. `coverage` is the URL param
+  // value: "problems" or "missing:<cat>[,<cat>]" (see CoverageFilter). Translated to the endpoint's
+  // problems/missing params here so callers work in the UI's vocabulary.
+  getHostsByCoverage: (
+    coverage: string
+  ): Promise<IHostsByCoverageResponse> => {
+    const { HOSTS_COVERAGE } = endpoints;
+    const params: Record<string, string | boolean | undefined> = {};
+    if (coverage === "problems") {
+      params.problems = true;
+    } else if (coverage.startsWith("missing:")) {
+      params.missing = coverage.slice("missing:".length);
+    }
+    const path = `${HOSTS_COVERAGE}?${buildQueryStringFromParams(params)}`;
     return sendRequest("GET", path);
   },
   refetch: (host: IHost) => {

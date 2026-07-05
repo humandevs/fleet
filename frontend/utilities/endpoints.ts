@@ -110,6 +110,9 @@ export default {
     `/${API_VERSION}/fleet/hosts/${hostId}/software/${softwareId}/uninstall`,
   HOST_CERTIFICATES: (id: number) =>
     `/${API_VERSION}/fleet/hosts/${id}/certificates`,
+  HOST_INTEGRATION_STATUS: (id: number) =>
+    `/${API_VERSION}/fleet/hosts/${id}/integration_status`,
+  HOSTS_COVERAGE: `/${API_VERSION}/fleet/hosts/coverage`,
   HOST_DEVICE_MAPPING: (id: number) =>
     `/${API_VERSION}/fleet/hosts/${id}/device_mapping`,
   HOST_DEVICE_MAPPING_IDP: (id: number) =>

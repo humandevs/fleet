@@ -276,6 +276,8 @@ type MacadminsDataFunc func(ctx context.Context, id uint) (*fleet.MacadminsData,
 
 type HostIntegrationStatusFunc func(ctx context.Context, hostID uint) ([]*fleet.HostIntegrationStatus, error)
 
+type HostsByCoverageFunc func(ctx context.Context, filter fleet.CoverageFilter) ([]uint, error)
+
 type MDMDataFunc func(ctx context.Context, id uint) (*fleet.HostMDM, error)
 
 type AggregatedMacadminsDataFunc func(ctx context.Context, teamID *uint) (*fleet.AggregatedMacadminsData, error)
@@ -1330,6 +1332,9 @@ type Service struct {
 
 	HostIntegrationStatusFunc        HostIntegrationStatusFunc
 	HostIntegrationStatusFuncInvoked bool
+
+	HostsByCoverageFunc        HostsByCoverageFunc
+	HostsByCoverageFuncInvoked bool
 
 	MDMDataFunc        MDMDataFunc
 	MDMDataFuncInvoked bool
@@ -3233,6 +3238,13 @@ func (s *Service) HostIntegrationStatus(ctx context.Context, hostID uint) ([]*fl
 	s.HostIntegrationStatusFuncInvoked = true
 	s.mu.Unlock()
 	return s.HostIntegrationStatusFunc(ctx, hostID)
+}
+
+func (s *Service) HostsByCoverage(ctx context.Context, filter fleet.CoverageFilter) ([]uint, error) {
+	s.mu.Lock()
+	s.HostsByCoverageFuncInvoked = true
+	s.mu.Unlock()
+	return s.HostsByCoverageFunc(ctx, filter)
 }
 
 func (s *Service) MDMData(ctx context.Context, id uint) (*fleet.HostMDM, error) {

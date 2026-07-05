@@ -1241,6 +1241,10 @@ type Datastore interface {
 	ListHostIntegrationStatus(ctx context.Context, hostID uint) ([]*HostIntegrationStatus, error)
 	// AggregatedHostIntegrationStatus returns a fleet-wide, optionally team-scoped, coverage rollup.
 	AggregatedHostIntegrationStatus(ctx context.Context, teamID *uint) ([]*AggregatedIntegrationStatus, error)
+	// ListHostsByCoverage returns the IDs of hosts matching the coverage filter, powering N-able-style
+	// saved views ("only hosts with problems", "hosts missing Managed AV"). Freshness is applied in SQL
+	// so a stale "protected" is treated as a gap. Returns nil for a zero filter.
+	ListHostsByCoverage(ctx context.Context, filter CoverageFilter) ([]uint, error)
 	SetOrUpdateMDMData(ctx context.Context, hostID uint, isServer, enrolled bool, serverURL string, installedFromDep bool, name string, fleetEnrollRef string, isPersonalEnrollment bool) error
 	// UpdateMDMData updates the `enrolled` field of the host with the given ID.
 	UpdateMDMData(ctx context.Context, hostID uint, enrolled bool) error
