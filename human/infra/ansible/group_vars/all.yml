@@ -10,12 +10,18 @@ fleet_repo_branch: "human-dev"
 fleet_src_dir: "/opt/fleet-src"      # where the fork is cloned + built
 fleet_bin: "/usr/local/bin/fleet"    # installed binary
 
-# --- External MySQL (the box on your LAN) ---
-# Fleet is MySQL-only (8.0.36+, NOT MariaDB/Postgres). The VM does NOT run MySQL; it points here.
-fleet_mysql_address: "REPLACE_WITH_LAN_MYSQL_IP:3306"
+# --- MySQL + Redis via the repo's docker-compose (self-contained; the `deps` role runs them) ---
+# Fleet is MySQL-only (8.0.36+, NOT MariaDB/Postgres). The compose `mysql` service publishes on
+# 127.0.0.1:3306 with a persistent volume, and auto-creates db `fleet` + user `fleet`/`insecure` + root/toor
+# — so these values are dictated by docker-compose.yml, not chosen here. To split the DB onto a separate box
+# later: drop the `deps` role and point fleet_mysql_address at that host.
+fleet_mysql_address: "127.0.0.1:3306"
 fleet_mysql_database: "fleet"
-fleet_mysql_username: "fleet"
-# fleet_mysql_password  -> vault.yml
+fleet_mysql_username: "fleet"       # compose MYSQL_USER
+fleet_mysql_password: "insecure"    # compose MYSQL_PASSWORD (dev cred, not secret — matches docker-compose.yml)
+# The integration-test harness instead uses the compose `mysql_test` service (root/toor on 3307, its own
+# throwaway DBs). root/toor is the same well-known value in Fleet's public docker-compose.yml.
+mysql_root_password: "toor"
 
 # --- Redis (runs locally on each VM; ephemeral, not source of truth) ---
 fleet_redis_address: "127.0.0.1:6379"

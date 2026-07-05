@@ -1,0 +1,6 @@
+# Ansible collections used by the roles. Install on the controller:
+#   ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: ansible.posix   # firewalld (common role)
+# MySQL/Redis are run via the repo's docker-compose (deps role, shell `docker compose`), so no
+# community.mysql / community.docker collection is needed.

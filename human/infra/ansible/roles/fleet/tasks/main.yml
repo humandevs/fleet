@@ -20,15 +20,7 @@
     - "{{ fleet_config_dir }}"
     - "{{ fleet_tls_dir }}"
 
-# --- Source + build ---
-- name: Clone/update our fork
-  ansible.builtin.git:
-    repo: "{{ fleet_repo_url }}"
-    dest: "{{ fleet_src_dir }}"
-    version: "{{ fleet_repo_branch }}"
-    force: true
-  register: fleet_checkout
-
+# --- Build (the fork is already cloned by the common role, as fleet_checkout) ---
 - name: Build fleet (deps + frontend assets + binary)
   ansible.builtin.shell: |
     set -e

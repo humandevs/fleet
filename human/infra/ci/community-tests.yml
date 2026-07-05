@@ -1,0 +1,70 @@
+# Fork CI: community plugins + coverage feature tests, with a real MySQL 8 (self-contained setup).
+#
+# Copy to .github/workflows/ on the fork to enable. Brings up the repo's OWN docker-compose test services
+# (mysql_test on 3307, redis on 6379) so the MySQL flags the integration harness needs (GTID enforcement,
+# max_allowed_packet, root/toor) can't drift from what the code expects. This is the containerized twin of
+# the Ansible `mysql` role — both stand MySQL up as part of the setup. See human/infra/ansible/README.md §7.
+
+name: community-tests
+
+on:
+  push:
+    branches: [human-dev]
+  pull_request:
+    paths:
+      - "server/community/**"
+      - "server/fleet/host_integration_status.go"
+      - "server/service/host_integration_status*.go"
+      - "server/datastore/mysql/host_integration_status*.go"
+      - ".github/workflows/community-tests.yml"
+
+# Least-privilege token; this workflow only reads the repo.
+permissions:
+  contents: read
+
+jobs:
+  go-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+
+      - name: Start test MySQL + Redis (repo docker-compose)
+        run: docker compose up -d mysql_test redis
+
+      - name: Wait for MySQL
+        run: |
+          for i in $(seq 1 60); do
+            if mysqladmin ping --host=127.0.0.1 --port=3307 --protocol=TCP --user=root --password=toor --silent; then
+              echo "mysql up"; exit 0
+            fi
+            sleep 2
+          done
+          echo "mysql did not become ready"; docker compose logs mysql_test; exit 1
+
+      # No-DB tests first (fast feedback): our community plugins + the coverage filter/service unit tests.
+      - name: Community plugin + coverage unit tests
+        run: |
+          go test ./server/community/... -count=1
+          go test ./server/service/ -run 'Coverage|Integration' -count=1
+
+      # DB-backed: the migration up-test + the ListHostsByCoverage round-trip. Harness uses root/toor and
+      # creates its own DBs; mysql_test listens on the harness default (3307), so no port override needed.
+      - name: Datastore integration tests (MySQL)
+        env:
+          MYSQL_TEST: "1"
+          REDIS_TEST: "1"
+        run: |
+          go test ./server/datastore/mysql/ \
+            -run 'HostIntegrationStatus|Coverage|20260703' -count=1
+
+      - name: Dump MySQL logs on failure
+        if: failure()
+        run: docker compose logs mysql_test

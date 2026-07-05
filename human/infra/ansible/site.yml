@@ -6,6 +6,6 @@
   vars_files:
     - group_vars/vault.yml
   roles:
-    - common   # base packages, firewalld, Go + Node toolchain
-    - redis     # local ephemeral Redis
-    - fleet     # clone fork, build, TLS, migrations, systemd service
+    - common   # base packages, firewalld, Docker, Go + Node toolchain, fork checkout
+    - deps      # MySQL 8 + Redis via the repo's docker-compose (self-contained)
+    - fleet     # build the fork, TLS, migrations, native systemd service

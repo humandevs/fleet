@@ -1,9 +1,15 @@
 # Frontend wiring: coverage matrix card + host-list coverage filter
 
 Status of the frontend coverage work, and the exact remaining wiring to apply **on the VM** (where webpack
-+ Puppeteer can verify it). Nothing here was type-checked locally — no `node_modules` on the dev host.
++ Puppeteer can verify it end-to-end).
 
-## Done (built, unverified until the VM renders it)
+> **Verified on the dev host:** `yarn install` is done, so `npx tsc --noEmit` passes clean for the whole
+> frontend (card, filter control, service methods, interfaces, HostDetailsPage wiring all type-correct), and
+> the card's jest test (`IntegrationStatus.tests.tsx`) passes (4/4: labeled cells, worst-state-per-category,
+> empty state, loading gate). What still needs the VM is the *runtime render* (Puppeteer screenshot) and the
+> ManageHostsPage filter wiring below.
+
+## Done (built + type-checked + unit-tested locally)
 
 **Coverage matrix card — fully wired.**
 - `frontend/interfaces/integration_status.ts` — types.

@@ -1,0 +1,25 @@
+---
+# Stateful dependencies via the repo's OWN docker-compose.yml — MySQL 8 + Redis. Reusing the compose file
+# (vs a hand-rolled MySQL install) means the mysqld flags the app + integration harness need (GTID,
+# max_allowed_packet), the persistent volume, and the root/toor + fleet/insecure users can't drift from
+# what the code expects. Docker runs natively on the Linux VM (the broken thing was Docker Desktop on
+# Windows). The Fleet server itself stays native (systemd) — Fleet's compose only defines deps, not fleet.
+
+- name: Bring up MySQL + Redis (persistent compose services)
+  ansible.builtin.command:
+    cmd: docker compose up -d mysql redis
+    chdir: "{{ fleet_src_dir }}"
+  register: compose_up
+  changed_when: "'Started' in compose_up.stderr or 'Created' in compose_up.stderr"
+
+- name: Wait for MySQL to accept connections
+  ansible.builtin.command:
+    cmd: >
+      docker compose exec -T mysql
+      mysqladmin ping --host=127.0.0.1 --user=root --password={{ mysql_root_password }} --silent
+    chdir: "{{ fleet_src_dir }}"
+  register: mysql_ping
+  until: mysql_ping.rc == 0
+  retries: 30
+  delay: 4
+  changed_when: false

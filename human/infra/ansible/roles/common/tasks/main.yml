@@ -1,5 +1,6 @@
 ---
-# Base OS: packages, firewall, and the Go + Node toolchain needed to build our fork.
+# Base OS: packages, firewall, Docker Engine (for the stateful deps via the repo's compose), the Go + Node
+# toolchain (to build our fork's binary), and the fork checkout.
 # Written for Rocky/RHEL 9 (dnf). For Debian, swap the package tasks for apt equivalents.
 
 - name: Install base packages
@@ -12,6 +13,28 @@
       - openssl
       - firewalld
     state: present
+
+# --- Docker Engine (runs MySQL + Redis via the repo's docker-compose.yml; native on Linux, no WSL2) ---
+- name: Add Docker CE repo
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/centos/docker-ce.repo
+    dest: /etc/yum.repos.d/docker-ce.repo
+    mode: "0644"
+
+- name: Install Docker Engine + compose plugin
+  ansible.builtin.dnf:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-compose-plugin
+    state: present
+
+- name: Enable and start Docker
+  ansible.builtin.systemd:
+    name: docker
+    enabled: true
+    state: started
 
 - name: Enable firewalld
   ansible.builtin.systemd:
@@ -72,3 +95,12 @@
 - name: Enable corepack (yarn)
   ansible.builtin.command: corepack enable
   changed_when: false
+
+# --- Fork checkout (needed by both the deps role's compose file and the fleet role's build) ---
+- name: Clone/update our fork
+  ansible.builtin.git:
+    repo: "{{ fleet_repo_url }}"
+    dest: "{{ fleet_src_dir }}"
+    version: "{{ fleet_repo_branch }}"
+    force: true
+  register: fleet_checkout

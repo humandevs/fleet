@@ -1,8 +1,10 @@
 # Copy to vault.yml and encrypt:  ansible-vault encrypt group_vars/vault.yml
-# NEVER commit an unencrypted vault.yml. These map into fleet.env on the VM.
+# NEVER commit an unencrypted vault.yml.
 
-fleet_mysql_password: "REPLACE_ME"
-
-# Fleet server private key: encrypts MDM/other secrets at rest in the DB. Generate 32 random bytes:
+# Fleet server private key: encrypts MDM/integration secrets at rest in the DB. Generate 32 random bytes:
 #   openssl rand -base64 32
 fleet_server_private_key: "REPLACE_WITH_32_BYTE_BASE64"
+
+# NOTE: the MySQL password is NOT here — the dev DB uses the compose default `fleet`/`insecure`
+# (group_vars/all.yml). If you harden the DB for a real deployment, override MYSQL_PASSWORD in compose and
+# move fleet_mysql_password here (encrypted).
