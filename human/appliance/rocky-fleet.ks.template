@@ -67,6 +67,20 @@ fi
 
 ansible-galaxy collection install -r requirements.yml
 ansible-playbook -i inventory/localhost.ini site.yml
+
+# Smoke check: don't let the caller mark this appliance "provisioned" until Fleet actually answers on
+# :8080. Exiting non-zero here means systemd's ExecStartPost (which touches .provisioned) does NOT run, so
+# a failed build stays visible and re-attempts on the next boot instead of looking done.
+echo "Smoke check: waiting for Fleet /healthz on :8080 ..."
+for i in $(seq 1 60); do
+  if curl -fsk https://127.0.0.1:8080/healthz >/dev/null 2>&1; then
+    echo "Smoke check PASSED — Fleet is healthy."
+    exit 0
+  fi
+  sleep 5
+done
+echo "Smoke check FAILED — Fleet did not answer /healthz within ~5m. See 'systemctl status fleet'." >&2
+exit 1
 FIRSTBOOT
 chmod 0755 /usr/local/sbin/fleet-firstboot.sh
 

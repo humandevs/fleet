@@ -1,5 +1,27 @@
 # Fleet appliance — one-command build
 
+## TL;DR
+
+```powershell
+# 1. Download the Rocky 9 ISO (elevated PowerShell on the Hyper-V host):
+mkdir C:\isos -Force
+curl.exe -L -o C:\isos\Rocky-9-latest-x86_64-minimal.iso `
+  https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9-latest-x86_64-minimal.iso
+
+# 2. Build the appliance VM (no SSH key needed — uses password auth):
+cd human\appliance
+.\Build-FleetAppliance.ps1 -RepoUrl https://github.com/your-org/fleet.git -AdminPassword 'SetAStrongOne'
+
+# 3. Watch it come up, then open the UI:
+vmconnect.exe localhost fleet-prod
+Get-VMNetworkAdapter -VMName fleet-prod | Select-Object IPAddresses   # → https://<ip>:8080
+```
+
+First boot self-provisions in ~15 min (Docker deps + builds Fleet). For many VMs, bake a golden image once
+([packer/](./packer/README.md)) so clones boot ready in ~1 min. Details below.
+
+---
+
 Build a **self-provisioning** Fleet VM: one PowerShell command creates the Hyper-V VM, unattended-installs
 Rocky 9, and the box provisions itself on first boot (Docker Compose MySQL + Redis, builds Fleet CE from our
 fork, community plugins, native systemd service). No interactive install, no manual Ansible run.
