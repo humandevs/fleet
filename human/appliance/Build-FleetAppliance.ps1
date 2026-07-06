@@ -8,11 +8,11 @@
 .DESCRIPTION
   End-to-end, no interactive install steps. Steps performed:
     1. Render rocky-fleet.ks.template -> ks.cfg (hostname, admin user, SSH key, fork repo/branch).
-    2. Build a tiny ISO labeled OEMDRV containing ks.cfg (Anaconda auto-loads it — no boot-param editing).
+    2. Build a tiny ISO labeled OEMDRV containing ks.cfg (Anaconda auto-loads it - no boot-param editing).
     3. Create a Gen-2 VM, attach the Rocky ISO (boot) + the OEMDRV ISO (kickstart), start it.
     4. Rocky installs unattended, reboots, and the fleet-firstboot systemd unit runs the Ansible playbook.
 
-  Rocky has no "LTSB" (that's Windows terminology) — the Rocky 9 line is supported ~10 years (to 2032), and
+  Rocky has no "LTSB" (that's Windows terminology) - the Rocky 9 line is supported ~10 years (to 2032), and
   -RockyIso defaults to the 9-latest minimal ISO. Pin an exact point release for reproducibility if desired.
 
 .EXAMPLE
@@ -21,11 +21,11 @@
     -RepoUrl https://github.com/your-org/fleet.git -Branch human-dev
 
 .EXAMPLE
-  # No key yet — let the script generate one (saved under <VMPath>\<VMName>-ssh):
+  # No key yet - let the script generate one (saved under <VMPath>\<VMName>-ssh):
   .\Build-FleetAppliance.ps1 -GenerateSshKey -RepoUrl https://github.com/your-org/fleet.git
 
 .EXAMPLE
-  # No key in the image at all — password auth (user 'fleet' / -AdminPassword):
+  # No key in the image at all - password auth (user 'fleet' / -AdminPassword):
   .\Build-FleetAppliance.ps1 -AdminPassword 'S3tSomething' -RepoUrl https://github.com/your-org/fleet.git
 #>
 [CmdletBinding()]
@@ -40,7 +40,7 @@ param(
   [switch]$GenerateSshKey,                       # optional: create a fresh keypair for this appliance
   [string]$AdminUser     = "fleet",
   [string]$AdminPassword = "fleet-appliance",   # console + password-SSH login. CHANGE for anything exposed.
-  # Source: LOCAL by default (private repo, and captures uncommitted work) — the local tree is packaged onto
+  # Source: LOCAL by default (private repo, and captures uncommitted work) - the local tree is packaged onto
   # a FLEETSRC ISO the VM extracts on first boot, so no git access to the private repo is needed. Defaults to
   # the repo root relative to this script (human\appliance\..\..). Pass -RepoUrl instead to git-clone a
   # remote (public, or private via https://<token>@github.com/org/fleet.git).
@@ -107,7 +107,7 @@ if ($SshPublicKeyPath) {
   $sshLine = "sshkey --username=$AdminUser `"$sshKey`""
   Write-Host "==> SSH access: key ($SshPublicKeyPath)"
 } else {
-  Write-Host "==> SSH access: PASSWORD only — no key baked into the image." -ForegroundColor Yellow
+  Write-Host "==> SSH access: PASSWORD only - no key baked into the image." -ForegroundColor Yellow
   Write-Host "    Log in with user '$AdminUser' / -AdminPassword (console or 'ssh $AdminUser@<vm-ip>')."
   Write-Host "    Add a key after first login and disable password auth for anything exposed." -ForegroundColor Yellow
 }
@@ -119,7 +119,7 @@ if (-not $RepoUrl) {
   if (-not (Test-Path (Join-Path $RepoSource "go.mod"))) {
     throw "RepoSource '$RepoSource' doesn't look like the Fleet repo (no go.mod). Pass -RepoSource <path> or -RepoUrl <url>."
   }
-  Write-Host "==> Source: LOCAL working tree at $RepoSource (packaged onto a FLEETSRC ISO — no repo network access needed)."
+  Write-Host "==> Source: LOCAL working tree at $RepoSource (packaged onto a FLEETSRC ISO - no repo network access needed)."
   $srcStage = Join-Path $env:TEMP "fleet-src-stage"
   Remove-Item $srcStage -Recurse -Force -ErrorAction SilentlyContinue
   New-Item -ItemType Directory -Force -Path $srcStage | Out-Null
@@ -130,7 +130,7 @@ if (-not $RepoUrl) {
       --exclude='*node_modules*' --exclude='*/.git' --exclude='*/.git/*' `
       --exclude='./build' --exclude='./build/*' --exclude='*/.cache/*' --exclude='*.vhdx' .
   if ($LASTEXITCODE -ne 0) { throw "tar failed packaging the repo. Ensure tar.exe is available (Windows 10/11 includes it)." }
-  Write-Host ("    Archive: {0} MB (build version metadata will be blank — no .git; fine for dev)." -f [math]::Round((Get-Item $tgz).Length/1MB))
+  Write-Host ("    Archive: {0} MB (build version metadata will be blank - no .git; fine for dev)." -f [math]::Round((Get-Item $tgz).Length/1MB))
 } else {
   Write-Host "==> Source: REMOTE git ($RepoUrl @ $Branch)."
 }
@@ -200,7 +200,7 @@ if ($srcIso) { Add-VMDvdDrive $VMName -Path $srcIso }
 # Boot the Rocky install DVD first.
 $bootDvd = Get-VMDvdDrive $VMName | Where-Object { $_.Path -eq $RockyIso }
 Set-VMFirmware $VMName -FirstBootDevice $bootDvd
-# Rocky is signed under the MS UEFI CA — keep Secure Boot on with that template.
+# Rocky is signed under the MS UEFI CA - keep Secure Boot on with that template.
 Set-VMFirmware $VMName -SecureBootTemplate MicrosoftUEFICertificateAuthority
 
 Write-Host "==> Starting VM (unattended Rocky install begins now)..."
