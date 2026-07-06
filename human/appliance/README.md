@@ -53,8 +53,12 @@ cd human\appliance
   <one of the SSH options below>
 ```
 
-Common overrides: `-VMName`, `-RockyIso`, `-SwitchName "fleet-ext"`, `-Cpu 4`, `-DiskSize 80GB`,
-`-AdminUser fleet`, `-AdminPassword <pw>`.
+Common overrides:
+- **Disk location:** `-VhdxPath D:\VMs\fleet-prod.vhdx` (a full `*.vhdx` path or a directory — put the disk
+  on another drive). Defaults to `<VMPath>\<VMName>.vhdx`.
+- **CPU / memory:** `-Cpu 6`, `-MemoryStartup 8GB`, `-MemoryMin 2GB`, `-MemoryMax 12GB` (dynamic memory).
+- **Disk size:** `-DiskSize 80GB`. Other: `-VMName`, `-RockyIso`, `-SwitchName "fleet-ext"`,
+  `-AdminUser fleet`, `-AdminPassword <pw>`.
 
 ### SSH access — you don't need a key already
 

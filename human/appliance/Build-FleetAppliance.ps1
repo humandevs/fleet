@@ -31,7 +31,9 @@
 [CmdletBinding()]
 param(
   [string]$VMName        = "fleet-prod",
-  [string]$VMPath        = "C:\HyperV",
+  [string]$VMPath        = "C:\HyperV",           # where generated ISOs live (and the VHDX, unless -VhdxPath)
+  [string]$VhdxPath      = "",                     # VM disk location: a full *.vhdx path OR a directory.
+                                                   # Empty => <VMPath>\<VMName>.vhdx. Point at another drive here.
   [string]$RockyIso      = "C:\isos\Rocky-9-latest-x86_64-minimal.iso",
   [string]$SwitchName    = "Default Switch",
   [string]$SshPublicKeyPath,                    # optional: bring your own public key
@@ -45,9 +47,10 @@ param(
   [string]$RepoSource,                           # local path; default = repo root (resolved below)
   [string]$RepoUrl       = "",                    # remote fallback; overrides local when set
   [string]$Branch        = "human-dev",
-  [int]$Cpu              = 4,
-  [int64]$MemoryStartup  = 4GB,
-  [int64]$MemoryMax      = 8GB,
+  [int]$Cpu              = 4,                      # logical processors (vCPUs)
+  [int64]$MemoryStartup  = 4GB,                    # startup RAM
+  [int64]$MemoryMin      = 2GB,                    # dynamic-memory floor
+  [int64]$MemoryMax      = 8GB,                    # dynamic-memory ceiling
   [int64]$DiskSize       = 60GB
 )
 
@@ -168,11 +171,26 @@ Write-Host "==> Creating VM $VMName..."
 if (Get-VM -Name $VMName -ErrorAction SilentlyContinue) {
   throw "VM '$VMName' already exists. Remove it first: Stop-VM $VMName -Force; Remove-VM $VMName -Force"
 }
-$vhd = Join-Path $VMPath "$VMName.vhdx"
+# Resolve the VHDX path: full *.vhdx -> use as-is; a directory -> <dir>\<VMName>.vhdx; empty -> under VMPath.
+if (-not $VhdxPath) {
+  $vhd = Join-Path $VMPath "$VMName.vhdx"
+} elseif ($VhdxPath -match '\.vhdx$') {
+  $vhd = $VhdxPath
+} else {
+  $vhd = Join-Path $VhdxPath "$VMName.vhdx"
+}
+$vhdDir = Split-Path -Parent $vhd
+New-Item -ItemType Directory -Force -Path $vhdDir | Out-Null
+if (Test-Path $vhd) { throw "VHDX already exists: $vhd (remove it or choose another -VhdxPath)." }
+if ($MemoryMin -gt $MemoryStartup -or $MemoryStartup -gt $MemoryMax) {
+  throw "Memory must satisfy MemoryMin <= MemoryStartup <= MemoryMax (min=$MemoryMin startup=$MemoryStartup max=$MemoryMax)."
+}
+Write-Host "==> Disk: $vhd ($([math]::Round($DiskSize/1GB)) GB) | vCPU: $Cpu | RAM: $([math]::Round($MemoryStartup/1GB))GB (dyn $([math]::Round($MemoryMin/1GB))-$([math]::Round($MemoryMax/1GB))GB)"
+
 New-VM -Name $VMName -Generation 2 -MemoryStartupBytes $MemoryStartup `
   -NewVHDPath $vhd -NewVHDSizeBytes $DiskSize -SwitchName $SwitchName | Out-Null
 Set-VMProcessor $VMName -Count $Cpu
-Set-VMMemory    $VMName -DynamicMemoryEnabled $true -MinimumBytes 2GB -MaximumBytes $MemoryMax
+Set-VMMemory    $VMName -DynamicMemoryEnabled $true -MinimumBytes $MemoryMin -MaximumBytes $MemoryMax
 Set-VM $VMName -AutomaticStartAction StartIfRunning -AutomaticStopAction Save -CheckpointType Disabled
 
 # Rocky boot ISO + the OEMDRV kickstart ISO (+ FLEETSRC source ISO in local mode).
