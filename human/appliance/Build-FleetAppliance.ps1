@@ -224,10 +224,13 @@ if (-not $RepoUrl) {
   @('.git','.git/*','*/.git','*/.git/*','*node_modules*','build','build/*',
     '.cache','.cache/*','*/.cache','*/.cache/*','*.vhdx') | Set-Content -Encoding Ascii $exFile
   $tarExe = Join-Path $env:SystemRoot "System32\tar.exe"   # absolute path -> guaranteed Windows bsdtar, not a PATH tar
-  # Run tar as a child process and poll the growing .tar.gz so the user sees live progress (not a frozen line).
+  # Run tar as a child process and poll the growing .tar.gz so the user sees live progress (not a frozen
+  # line). [System.Diagnostics.Process] is used (not Start-Process) because it reports ExitCode reliably.
   $tarArgs = '-czf "{0}" -C "{1}" --exclude-from="{2}" .' -f $tgz, $RepoSource, $exFile
+  $psi = [System.Diagnostics.ProcessStartInfo]::new()
+  $psi.FileName = $tarExe; $psi.Arguments = $tarArgs; $psi.UseShellExecute = $false; $psi.CreateNoWindow = $true
   $sw = [System.Diagnostics.Stopwatch]::StartNew()
-  $proc = Start-Process -FilePath $tarExe -ArgumentList $tarArgs -NoNewWindow -PassThru
+  $proc = [System.Diagnostics.Process]::Start($psi)
   while (-not $proc.HasExited) {
     Start-Sleep -Milliseconds 700
     $mb = if (Test-Path $tgz) { [math]::Round((Get-Item $tgz).Length / 1MB) } else { 0 }

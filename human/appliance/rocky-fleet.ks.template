@@ -117,4 +117,62 @@ WantedBy=multi-user.target
 UNIT
 
 systemctl enable fleet-firstboot.service
+
+# --- Console banner: show IP + Fleet status + management URL on /etc/issue (the console pre-login screen),
+# so you can read how to reach Fleet by just opening the VM console -- no login or commands needed. ---
+cat > /usr/local/sbin/fleet-console-banner.sh <<'BANNER'
+#!/bin/bash
+IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{print $7; exit}')
+[ -z "$IP" ] && IP=$(hostname -I 2>/dev/null | awk '{print $1}')
+[ -z "$IP" ] && IP="(acquiring...)"
+if systemctl is-active --quiet fleet && curl -fsk https://127.0.0.1:8080/healthz >/dev/null 2>&1; then
+  ST="running (healthy)"
+elif systemctl is-active --quiet fleet-firstboot 2>/dev/null || systemctl is-active --quiet fleet-personalize 2>/dev/null; then
+  ST="provisioning (building Fleet, ~15 min)..."
+else
+  ST="NOT running -- ssh in and: sudo journalctl -u fleet -n 50"
+fi
+NEW=$(mktemp)
+{
+  echo ""
+  echo "  ==============================================="
+  echo "   Fleet CE+ appliance  --  $(hostname)"
+  echo "   IP address : ${IP}"
+  echo "   Fleet      : ${ST}"
+  echo "   Manage at  : https://${IP}:8080"
+  echo "   Login      : fleet   (or:  ssh fleet@${IP})"
+  echo "  ==============================================="
+  echo ""
+} > "$NEW"
+if ! cmp -s "$NEW" /etc/issue 2>/dev/null; then
+  cp "$NEW" /etc/issue
+  # re-render the console prompt so new info shows without a keypress -- only when nobody is on tty1.
+  who 2>/dev/null | grep -q 'tty1' || systemctl restart getty@tty1 2>/dev/null || true
+fi
+rm -f "$NEW"
+BANNER
+chmod 0755 /usr/local/sbin/fleet-console-banner.sh
+
+cat > /etc/systemd/system/fleet-banner.service <<'SVC'
+[Unit]
+Description=Fleet console banner (IP + status + URL)
+After=network-online.target
+Wants=network-online.target
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/fleet-console-banner.sh
+SVC
+
+cat > /etc/systemd/system/fleet-banner.timer <<'TMR'
+[Unit]
+Description=Refresh the Fleet console banner
+[Timer]
+OnBootSec=10
+OnUnitActiveSec=30
+AccuracySec=5
+[Install]
+WantedBy=timers.target
+TMR
+
+systemctl enable fleet-banner.timer
 %end

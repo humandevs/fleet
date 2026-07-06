@@ -3,6 +3,11 @@
 Description=Fleet (Human-ISM fork)
 After=network-online.target redis.service
 Wants=network-online.target
+# If Fleet fails repeatedly (e.g. DB not up, missing binary), STOP retrying instead of crash-looping every
+# few seconds and flooding the console. After 4 failures in 2 min systemd gives up (failed state) -- quiet,
+# and 'systemctl status fleet' shows why. Re-arm with 'systemctl reset-failed fleet; systemctl start fleet'.
+StartLimitIntervalSec=120
+StartLimitBurst=4
 
 [Service]
 User=fleet
@@ -10,7 +15,7 @@ Group=fleet
 EnvironmentFile={{ fleet_config_dir }}/fleet.env
 ExecStart={{ fleet_bin }} serve
 Restart=on-failure
-RestartSec=5
+RestartSec=15
 # Fleet is stateless on disk; keep it locked down.
 NoNewPrivileges=true
 ProtectSystem=strict
