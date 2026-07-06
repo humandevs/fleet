@@ -89,16 +89,46 @@ public static class IsoFileWriter {
   [IsoFileWriter]::Write($result.ImageStream, $IsoPath)
 }
 
+# Next un-used key name, so "make a new key" never clobbers one an existing VM may still use. Rotates the
+# _a/_b/_c suffix when present, else appends _2, _3, ...
+function Get-NextKeyName {
+  param([string]$Dir, [string]$Base)
+  if ($Base -match '_([a-z])$') {
+    for ($n = [int][char]$Matches[1] + 1; $n -le [int][char]'z'; $n++) {
+      $cand = $Base -replace '_[a-z]$', ("_" + [char]$n)
+      if (-not (Test-Path (Join-Path $Dir "$cand.pub"))) { return $cand }
+    }
+  }
+  $i = 2
+  while (Test-Path (Join-Path $Dir "$($Base)_$i.pub")) { $i++ }
+  return "$($Base)_$i"
+}
+
 # --- 0. Resolve SSH access mode: key (given), key (generated), or password-only (no key in the image) ---
 if ($GenerateSshKey) {
   $keyDir = Join-Path $VMPath "$VMName-ssh"
   New-Item -ItemType Directory -Force -Path $keyDir | Out-Null
-  # Stable, fleet_ceplus-labeled key, REUSED across builds so a rebuild never locks you out. Override the
-  # name with -SshKeyName for a distinct key. The '_a' denotes the first key (rotate to _b, _c, ...).
+  # Stable, fleet_ceplus-labeled key. If it already exists we PROMPT (default Y = reuse, so a rebuild never
+  # locks you out); answering n makes a new key at the next suffix (_a -> _b), never clobbering the old one.
+  # Non-interactive runs auto-reuse. Override the base name with -SshKeyName.
   $genKey = Join-Path $keyDir $SshKeyName
   $pub    = "$genKey.pub"
   if (Test-Path $pub) {
-    Write-Host "==> Reusing existing SSH key: $genKey" -ForegroundColor Cyan
+    $reuse = $true
+    if ([Environment]::UserInteractive) {
+      $ans = Read-Host "SSH key '$SshKeyName' already exists in $keyDir. Reuse it? [Y/n]"
+      if ($ans -match '^\s*[nN]') { $reuse = $false }
+    }
+    if ($reuse) {
+      Write-Host "==> Reusing existing SSH key: $genKey" -ForegroundColor Cyan
+    } else {
+      $SshKeyName = Get-NextKeyName $keyDir $SshKeyName
+      $genKey = Join-Path $keyDir $SshKeyName
+      $pub    = "$genKey.pub"
+      Write-Host "==> Generating NEW SSH key: $genKey" -ForegroundColor Cyan
+      & ssh-keygen -t ed25519 -C "fleet_ceplus-$VMName" -f $genKey -N '""' -q
+      if ($LASTEXITCODE -ne 0) { throw "ssh-keygen failed. Ensure the OpenSSH client is installed (Windows 10/11 includes it)." }
+    }
   } elseif (Test-Path $genKey) {
     # Private key exists but public is missing: derive the public (avoids ssh-keygen's overwrite prompt).
     & ssh-keygen -y -f $genKey | Set-Content -Encoding Ascii $pub

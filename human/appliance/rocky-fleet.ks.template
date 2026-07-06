@@ -27,10 +27,12 @@ services --enabled=sshd
 
 reboot --eject
 
-%packages
+# --ignoremissing: never halt the unattended install on a package the ISO's repos lack. git is NOT on the
+# Rocky minimal ISO (it's in AppStream) and isn't needed at install time -- first boot installs it from the
+# network repos (dnf install -y ansible-core git).
+%packages --ignoremissing
 @^minimal-environment
 openssh-server
-git
 %end
 
 # --- First-boot self-provision: install Ansible, clone the fork, run the playbook against localhost. ---
