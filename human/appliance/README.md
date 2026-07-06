@@ -67,9 +67,9 @@ supply one. Three ways:
 
 1. **Have a key** → embed it: `-SshPublicKeyPath $HOME\.ssh\id_ed25519.pub`
 2. **No key yet, want one** → `-GenerateSshKey` (script runs `ssh-keygen`, saves the pair to
-   `<VMPath>\<VMName>-ssh\`; only the public half is embedded). Connect later with
-   `ssh -i C:\HyperV\fleet-prod-ssh\id_ed25519 fleet@<vm-ip>`. (Or generate manually:
-   `ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519`, then use option 1.)
+   `<VMPath>\<VMName>-ssh\<VMName>-<timestamp>`; only the public half is embedded). Each run makes a fresh,
+   timestamped key — no silent reuse — and prints the exact `ssh -i <path> fleet@<vm-ip>` to connect with.
+   (Or generate manually: `ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519`, then use option 1.)
 3. **No key in the image at all** → omit both and log in by **password**: `-AdminPassword 'SetAStrongOne'`,
    then `ssh fleet@<vm-ip>` (or the Hyper-V console). Fine for an internal/lab box; for anything exposed,
    add a key after first login and set `PasswordAuthentication no` in `/etc/ssh/sshd_config`.

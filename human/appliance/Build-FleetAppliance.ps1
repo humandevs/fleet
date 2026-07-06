@@ -37,7 +37,9 @@ param(
   [string]$RockyIso      = "C:\isos\Rocky-9-latest-x86_64-minimal.iso",
   [string]$SwitchName    = "Default Switch",
   [string]$SshPublicKeyPath,                    # optional: bring your own public key
-  [switch]$GenerateSshKey,                       # optional: create a fresh keypair for this appliance
+  [switch]$GenerateSshKey,                       # optional: create (or REUSE) a keypair for the appliance
+  [string]$SshKeyName    = "fleet_ceplus_ed25519_a",  # -GenerateSshKey key filename; reused across builds
+                                                       # so you never get locked out. Override for a distinct key.
   [string]$AdminUser     = "fleet",
   [string]$AdminPassword = "fleet-appliance",   # console + password-SSH login. CHANGE for anything exposed.
   # Source: LOCAL by default (private repo, and captures uncommitted work) - the local tree is packaged onto
@@ -91,14 +93,24 @@ public static class IsoFileWriter {
 if ($GenerateSshKey) {
   $keyDir = Join-Path $VMPath "$VMName-ssh"
   New-Item -ItemType Directory -Force -Path $keyDir | Out-Null
-  $genKey = Join-Path $keyDir "id_ed25519"
-  if (-not (Test-Path $genKey)) {
+  # Stable, fleet_ceplus-labeled key, REUSED across builds so a rebuild never locks you out. Override the
+  # name with -SshKeyName for a distinct key. The '_a' denotes the first key (rotate to _b, _c, ...).
+  $genKey = Join-Path $keyDir $SshKeyName
+  $pub    = "$genKey.pub"
+  if (Test-Path $pub) {
+    Write-Host "==> Reusing existing SSH key: $genKey" -ForegroundColor Cyan
+  } elseif (Test-Path $genKey) {
+    # Private key exists but public is missing: derive the public (avoids ssh-keygen's overwrite prompt).
+    & ssh-keygen -y -f $genKey | Set-Content -Encoding Ascii $pub
+    Write-Host "==> Reused existing private key; regenerated public: $pub" -ForegroundColor Cyan
+  } else {
     Write-Host "==> Generating SSH keypair (no passphrase) at $genKey ..."
-    & ssh-keygen -t ed25519 -C "fleet-appliance-$VMName" -f $genKey -N '""' -q
+    & ssh-keygen -t ed25519 -C "fleet_ceplus-$VMName" -f $genKey -N '""' -q
     if ($LASTEXITCODE -ne 0) { throw "ssh-keygen failed. Ensure the OpenSSH client is installed (Windows 10/11 includes it)." }
   }
-  $SshPublicKeyPath = "$genKey.pub"
-  Write-Host "    Private key: $genKey   (connect with: ssh -i $genKey $AdminUser@<vm-ip>)" -ForegroundColor Cyan
+  $SshPublicKeyPath = $pub
+  Write-Host "    Key: $genKey  (public half embedded)" -ForegroundColor Cyan
+  Write-Host "    Connect: ssh -i $genKey $AdminUser@<vm-ip>" -ForegroundColor Cyan
 }
 
 $sshLine = ""
