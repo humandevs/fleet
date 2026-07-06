@@ -13,7 +13,7 @@
 [CmdletBinding()]
 param(
   [string]$VMName     = "fleet-prod",
-  [string]$User       = "fleet",
+  [string]$User       = "fleetadmin",
   [string]$KeyPath    = "",          # e.g. C:\HyperV\fleet-prod-ssh\fleet_ceplus_ed25519_a
   [int]$TimeoutMin    = 40
 )

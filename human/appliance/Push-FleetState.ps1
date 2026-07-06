@@ -23,7 +23,7 @@
 param(
   [string]$VMName    = "fleet-prod",
   [string]$IP        = "",
-  [string]$User      = "fleet",
+  [string]$User      = "fleetadmin",
   [string]$KeyPath   = "C:\HyperV\fleet-prod-ssh\fleet_ceplus_ed25519_a",
   [string]$Artifact  = "$PSScriptRoot\artifacts\fleet",   # local path to the built linux binary
   [string]$RemoteBin = "/usr/local/bin/fleet",             # where the runtime VM runs it from

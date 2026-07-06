@@ -1,9 +1,9 @@
 ---
 # Build our fork, configure TLS + env, run migrations (active writer only), install the systemd service.
 
-- name: Create fleet system user
+- name: Create fleet service user (distinct from the admin login user, to avoid locking out login)
   ansible.builtin.user:
-    name: fleet
+    name: "{{ fleet_service_user }}"
     system: true
     shell: /sbin/nologin
     home: "{{ fleet_config_dir }}"
@@ -13,8 +13,8 @@
   ansible.builtin.file:
     path: "{{ item }}"
     state: directory
-    owner: fleet
-    group: fleet
+    owner: "{{ fleet_service_user }}"
+    group: "{{ fleet_service_user }}"
     mode: "0750"
   loop:
     - "{{ fleet_config_dir }}"
@@ -53,8 +53,8 @@
 - name: Secure TLS files
   ansible.builtin.file:
     path: "{{ fleet_tls_dir }}"
-    owner: fleet
-    group: fleet
+    owner: "{{ fleet_service_user }}"
+    group: "{{ fleet_service_user }}"
     recurse: true
 
 # --- Config env (secrets from vault) ---
@@ -62,8 +62,8 @@
   ansible.builtin.template:
     src: fleet.env.j2
     dest: "{{ fleet_config_dir }}/fleet.env"
-    owner: fleet
-    group: fleet
+    owner: "{{ fleet_service_user }}"
+    group: "{{ fleet_service_user }}"
     mode: "0640"
   notify: restart fleet
 

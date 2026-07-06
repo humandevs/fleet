@@ -42,7 +42,7 @@ param(
   [switch]$GenerateSshKey,                       # optional: create (or REUSE) a keypair for the appliance
   [string]$SshKeyName    = "fleet_ceplus_ed25519_a",  # -GenerateSshKey key filename; reused across builds
                                                        # so you never get locked out. Override for a distinct key.
-  [string]$AdminUser     = "fleet",
+  [string]$AdminUser     = "fleetadmin",          # human login; distinct from the 'fleet' service account
   [string]$AdminPassword = "",                    # blank => a strong random password is generated + printed
   # Source: LOCAL by default (private repo, and captures uncommitted work) - the local tree is packaged onto
   # a FLEETSRC ISO the VM extracts on first boot, so no git access to the private repo is needed. Defaults to

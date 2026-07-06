@@ -13,6 +13,11 @@ fleet_repo_url: "https://github.com/REPLACE_WITH_YOUR_FORK/fleet.git"
 fleet_repo_branch: "human-dev"
 fleet_src_dir: "/opt/fleet-src"      # single source location the roles build from
 fleet_bin: "/usr/local/bin/fleet"    # installed binary
+# The daemon runs as this dedicated non-login account. 'fleet' matches Fleet's own convention + a future
+# Fleet container (so ownership lines up), and the MySQL DB user is also 'fleet' (separate namespace). It
+# MUST differ from the admin LOGIN user (kickstart -AdminUser, default 'fleetadmin') -- reusing that name
+# would set the login account's shell to /sbin/nologin and lock you out.
+fleet_service_user: "fleet"
 
 # --- MySQL + Redis via the repo's docker-compose (self-contained; the `deps` role runs them) ---
 # Fleet is MySQL-only (8.0.36+, NOT MariaDB/Postgres). The compose `mysql` service publishes on

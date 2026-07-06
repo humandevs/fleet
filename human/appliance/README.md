@@ -58,11 +58,11 @@ Common overrides:
   on another drive). Defaults to `<VMPath>\<VMName>.vhdx`.
 - **CPU / memory:** `-Cpu 6`, `-MemoryStartup 8GB`, `-MemoryMin 2GB`, `-MemoryMax 12GB` (dynamic memory).
 - **Disk size:** `-DiskSize 80GB`. Other: `-VMName`, `-RockyIso`, `-SwitchName "fleet-ext"`,
-  `-AdminUser fleet`, `-AdminPassword <pw>`.
+  `-AdminUser fleetadmin`, `-AdminPassword <pw>`.
 
 ### SSH access — you don't need a key already
 
-The `fleet` admin user always gets a password (console + password SSH). A key is embedded **only** if you
+The `fleetadmin` admin user always gets a password (console + password SSH). A key is embedded **only** if you
 supply one. Three ways:
 
 1. **Have a key** → embed it: `-SshPublicKeyPath $HOME\.ssh\id_ed25519.pub`
@@ -70,11 +70,11 @@ supply one. Three ways:
    under `<VMPath>\<VMName>-ssh\`; only the public half is embedded in the VM. On later runs, if that key
    exists the script **prompts `Reuse it? [Y/n]`** — Enter/Y reuses it (so a rebuild never locks you out),
    `n` makes a fresh key at the next suffix (`_a`→`_b`, never clobbering the old one). Non-interactive runs
-   auto-reuse. It prints the key path and the exact `ssh -i <path> fleet@<vm-ip>` line. Override the base
+   auto-reuse. It prints the key path and the exact `ssh -i <path> fleetadmin@<vm-ip>` line. Override the base
    name with `-SshKeyName <name>`. (Or generate manually: `ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519`,
    then use option 1.)
 3. **No key in the image at all** → omit both and log in by **password**: `-AdminPassword 'SetAStrongOne'`,
-   then `ssh fleet@<vm-ip>` (or the Hyper-V console). Fine for an internal/lab box; for anything exposed,
+   then `ssh fleetadmin@<vm-ip>` (or the Hyper-V console). Fine for an internal/lab box; for anything exposed,
    add a key after first login and set `PasswordAuthentication no` in `/etc/ssh/sshd_config`.
 
 > Windows 10/11 ship the OpenSSH client (`ssh`, `ssh-keygen`) for options 1–2. If missing:
@@ -93,7 +93,7 @@ vmconnect.exe localhost fleet-prod                                  # console
 Get-VMNetworkAdapter -VMName fleet-prod | Select-Object IPAddresses # the IP once networked
 ```
 ```bash
-ssh fleet@<vm-ip> "sudo tail -f /var/log/fleet-firstboot.log"       # provisioning progress
+ssh fleetadmin@<vm-ip> "sudo tail -f /var/log/fleet-firstboot.log"       # provisioning progress
 # when done: https://<vm-ip>:8080   (then human/verify: npm run smoke against it)
 ```
 

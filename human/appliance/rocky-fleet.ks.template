@@ -140,7 +140,7 @@ NEW=$(mktemp)
   echo "   IP address : ${IP}"
   echo "   Fleet      : ${ST}"
   echo "   Manage at  : https://${IP}:8080"
-  echo "   Login      : fleet   (or:  ssh fleet@${IP})"
+  echo "   Login      : @@USERNAME@@   (or:  ssh @@USERNAME@@@${IP})"
   echo "  ==============================================="
   echo ""
 } > "$NEW"

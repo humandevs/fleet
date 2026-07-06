@@ -10,8 +10,8 @@ StartLimitIntervalSec=120
 StartLimitBurst=4
 
 [Service]
-User=fleet
-Group=fleet
+User={{ fleet_service_user }}
+Group={{ fleet_service_user }}
 EnvironmentFile={{ fleet_config_dir }}/fleet.env
 ExecStart={{ fleet_bin }} serve
 Restart=on-failure
