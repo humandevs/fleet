@@ -50,14 +50,20 @@ exec > /var/log/fleet-firstboot.log 2>&1
 
 dnf install -y ansible-core git
 
-REPO_DIR=/opt/fleet-appliance
-if [ ! -d "$REPO_DIR/.git" ]; then
-  git clone --branch "@@BRANCH@@" "@@REPO@@" "$REPO_DIR"
-else
-  git -C "$REPO_DIR" pull --ff-only
+# Obtain the Fleet source into /opt/fleet-src. Prefer the LOCAL working tree delivered on the FLEETSRC ISO
+# (private repo, captures uncommitted work — no repo network access); otherwise git-clone the remote.
+FLEET_SRC=/opt/fleet-src
+SRC_DEV=$(blkid -L FLEETSRC 2>/dev/null || true)
+if [ -n "$SRC_DEV" ]; then
+  mkdir -p /mnt/fleetsrc "$FLEET_SRC"
+  mount -o ro "$SRC_DEV" /mnt/fleetsrc
+  tar -xzf /mnt/fleetsrc/fleet-src.tar.gz -C "$FLEET_SRC"
+  umount /mnt/fleetsrc
+elif [ ! -f "$FLEET_SRC/go.mod" ]; then
+  git clone --branch "@@BRANCH@@" "@@REPO@@" "$FLEET_SRC"
 fi
 
-cd "$REPO_DIR/human/appliance/ansible"
+cd "$FLEET_SRC/human/appliance/ansible"
 
 # Generate this appliance's unique server private key (encrypts secrets at rest) once.
 if [ ! -f group_vars/vault.yml ]; then

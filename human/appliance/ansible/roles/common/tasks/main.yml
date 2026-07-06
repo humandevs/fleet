@@ -96,11 +96,26 @@
   ansible.builtin.command: corepack enable
   changed_when: false
 
-# --- Fork checkout (needed by both the deps role's compose file and the fleet role's build) ---
-- name: Clone/update our fork
+# Fleet source at {{ fleet_src_dir }}. Appliance/Packer deliver it out-of-band (FLEETSRC ISO extract or a
+# provision step), so it's usually already present. Push mode (controller -> remote VM) has no such delivery,
+# so we clone from fleet_repo_url when it's absent and a real URL is configured.
+- name: Check whether Fleet source is already present
+  ansible.builtin.stat:
+    path: "{{ fleet_src_dir }}/go.mod"
+  register: fleet_src_gomod
+
+- name: Clone the fork (push/remote mode only — when source not pre-delivered)
   ansible.builtin.git:
     repo: "{{ fleet_repo_url }}"
     dest: "{{ fleet_src_dir }}"
     version: "{{ fleet_repo_branch }}"
-    force: true
-  register: fleet_checkout
+  when:
+    - not fleet_src_gomod.stat.exists
+    - (fleet_repo_url | default('')) is match('^https?://')
+    - "'REPLACE_WITH' not in (fleet_repo_url | default(''))"
+
+- name: Assert Fleet source is present
+  ansible.builtin.stat:
+    path: "{{ fleet_src_dir }}/go.mod"
+  register: fleet_src_final
+  failed_when: not fleet_src_final.stat.exists

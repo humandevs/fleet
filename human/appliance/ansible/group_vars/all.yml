@@ -5,9 +5,13 @@ go_version: "1.26.4"
 node_version: "24"
 
 # --- Our fork ---
+# Source lives at fleet_src_dir. The appliance/Packer builds DELIVER it there (local FLEETSRC ISO extract,
+# capturing uncommitted work — no repo network access). fleet_repo_url/branch are only used as a fallback:
+# push mode (controller -> remote VM) clones them when source isn't pre-delivered. Leave the REPLACE_WITH
+# placeholder to disable that fallback (local/appliance builds don't need it).
 fleet_repo_url: "https://github.com/REPLACE_WITH_YOUR_FORK/fleet.git"
 fleet_repo_branch: "human-dev"
-fleet_src_dir: "/opt/fleet-src"      # where the fork is cloned + built
+fleet_src_dir: "/opt/fleet-src"      # single source location the roles build from
 fleet_bin: "/usr/local/bin/fleet"    # installed binary
 
 # --- MySQL + Redis via the repo's docker-compose (self-contained; the `deps` role runs them) ---

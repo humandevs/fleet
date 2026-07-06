@@ -38,7 +38,12 @@ param(
   [switch]$GenerateSshKey,                       # optional: create a fresh keypair for this appliance
   [string]$AdminUser     = "fleet",
   [string]$AdminPassword = "fleet-appliance",   # console + password-SSH login. CHANGE for anything exposed.
-  [Parameter(Mandatory)][string]$RepoUrl,       # for a PRIVATE fork use https://<token>@github.com/org/fleet.git
+  # Source: LOCAL by default (private repo, and captures uncommitted work) — the local tree is packaged onto
+  # a FLEETSRC ISO the VM extracts on first boot, so no git access to the private repo is needed. Defaults to
+  # the repo root relative to this script (human\appliance\..\..). Pass -RepoUrl instead to git-clone a
+  # remote (public, or private via https://<token>@github.com/org/fleet.git).
+  [string]$RepoSource,                           # local path; default = repo root (resolved below)
+  [string]$RepoUrl       = "",                    # remote fallback; overrides local when set
   [string]$Branch        = "human-dev",
   [int]$Cpu              = 4,
   [int64]$MemoryStartup  = 4GB,
@@ -104,6 +109,29 @@ if ($SshPublicKeyPath) {
   Write-Host "    Add a key after first login and disable password auth for anything exposed." -ForegroundColor Yellow
 }
 
+# --- Source mode: LOCAL working tree (default) packaged onto a FLEETSRC ISO, or REMOTE git. ---
+$srcStage = $null
+if (-not $RepoUrl) {
+  if (-not $RepoSource) { $RepoSource = (Resolve-Path (Join-Path $here "..\..")).Path }
+  if (-not (Test-Path (Join-Path $RepoSource "go.mod"))) {
+    throw "RepoSource '$RepoSource' doesn't look like the Fleet repo (no go.mod). Pass -RepoSource <path> or -RepoUrl <url>."
+  }
+  Write-Host "==> Source: LOCAL working tree at $RepoSource (packaged onto a FLEETSRC ISO — no repo network access needed)."
+  $srcStage = Join-Path $env:TEMP "fleet-src-stage"
+  Remove-Item $srcStage -Recurse -Force -ErrorAction SilentlyContinue
+  New-Item -ItemType Directory -Force -Path $srcStage | Out-Null
+  $tgz = Join-Path $srcStage "fleet-src.tar.gz"
+  Write-Host "    Archiving working tree (excluding .git / node_modules / build; captures uncommitted work)..."
+  # bsdtar ships as tar.exe on Windows 10/11. Broad '*' patterns match across path separators in bsdtar.
+  & tar.exe -czf $tgz -C $RepoSource `
+      --exclude='*node_modules*' --exclude='*/.git' --exclude='*/.git/*' `
+      --exclude='./build' --exclude='./build/*' --exclude='*/.cache/*' --exclude='*.vhdx' .
+  if ($LASTEXITCODE -ne 0) { throw "tar failed packaging the repo. Ensure tar.exe is available (Windows 10/11 includes it)." }
+  Write-Host ("    Archive: {0} MB (build version metadata will be blank — no .git; fine for dev)." -f [math]::Round((Get-Item $tgz).Length/1MB))
+} else {
+  Write-Host "==> Source: REMOTE git ($RepoUrl @ $Branch)."
+}
+
 # --- 1. Render the kickstart from the template ---
 Write-Host "==> Rendering kickstart..."
 $ks = Get-Content -Raw (Join-Path $here "rocky-fleet.ks.template")
@@ -126,6 +154,15 @@ $oemIso = Join-Path $VMPath "$VMName-oemdrv.iso"
 if (Test-Path $oemIso) { Remove-Item $oemIso -Force }
 New-DataIso -SourceDir $stage -IsoPath $oemIso -VolumeLabel "OEMDRV"
 
+# FLEETSRC ISO (local mode): the working-tree archive the VM extracts on first boot.
+$srcIso = $null
+if ($srcStage) {
+  Write-Host "==> Building FLEETSRC source ISO..."
+  $srcIso = Join-Path $VMPath "$VMName-fleetsrc.iso"
+  if (Test-Path $srcIso) { Remove-Item $srcIso -Force }
+  New-DataIso -SourceDir $srcStage -IsoPath $srcIso -VolumeLabel "FLEETSRC"
+}
+
 # --- 3. Create + configure the VM ---
 Write-Host "==> Creating VM $VMName..."
 if (Get-VM -Name $VMName -ErrorAction SilentlyContinue) {
@@ -138,9 +175,10 @@ Set-VMProcessor $VMName -Count $Cpu
 Set-VMMemory    $VMName -DynamicMemoryEnabled $true -MinimumBytes 2GB -MaximumBytes $MemoryMax
 Set-VM $VMName -AutomaticStartAction StartIfRunning -AutomaticStopAction Save -CheckpointType Disabled
 
-# Rocky boot ISO + the OEMDRV kickstart ISO.
+# Rocky boot ISO + the OEMDRV kickstart ISO (+ FLEETSRC source ISO in local mode).
 Add-VMDvdDrive $VMName -Path $RockyIso
 Add-VMDvdDrive $VMName -Path $oemIso
+if ($srcIso) { Add-VMDvdDrive $VMName -Path $srcIso }
 # Boot the Rocky install DVD first.
 $bootDvd = Get-VMDvdDrive $VMName | Where-Object { $_.Path -eq $RockyIso }
 Set-VMFirmware $VMName -FirstBootDevice $bootDvd

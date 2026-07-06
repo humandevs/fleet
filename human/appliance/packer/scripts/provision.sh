@@ -6,9 +6,15 @@ set -euxo pipefail
 
 dnf install -y ansible-core git
 
-REPO_DIR=/opt/fleet-appliance
-git clone --branch "$BRANCH" "$REPO_URL" "$REPO_DIR"
-cd "$REPO_DIR/human/appliance/ansible"
+# Source into /opt/fleet-src (the single source location the ansible roles expect). Prefer a local archive
+# uploaded by a Packer file provisioner (/tmp/fleet-src.tar.gz); otherwise git-clone the remote.
+FLEET_SRC=/opt/fleet-src
+if [ -f /tmp/fleet-src.tar.gz ]; then
+  mkdir -p "$FLEET_SRC"; tar -xzf /tmp/fleet-src.tar.gz -C "$FLEET_SRC"
+else
+  git clone --branch "$BRANCH" "$REPO_URL" "$FLEET_SRC"
+fi
+cd "$FLEET_SRC/human/appliance/ansible"
 
 # Throwaway key so the fleet role's template renders; replaced per-clone by the personalize service.
 umask 077

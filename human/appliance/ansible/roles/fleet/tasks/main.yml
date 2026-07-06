@@ -20,7 +20,7 @@
     - "{{ fleet_config_dir }}"
     - "{{ fleet_tls_dir }}"
 
-# --- Build (the fork is already cloned by the common role, as fleet_checkout) ---
+# --- Build (source is already at {{ fleet_src_dir }}: FLEETSRC extract or git clone) ---
 - name: Build fleet (deps + frontend assets + binary)
   ansible.builtin.shell: |
     set -e
@@ -30,7 +30,7 @@
     make build
   args:
     chdir: "{{ fleet_src_dir }}"
-  when: fleet_checkout.changed
+    creates: "{{ fleet_src_dir }}/build/fleet"
   # generate (not generate-dev) bundles assets so the server runs without webpack watch.
 
 - name: Install the fleet binary
@@ -39,7 +39,6 @@
     dest: "{{ fleet_bin }}"
     remote_src: true
     mode: "0755"
-  when: fleet_checkout.changed
 
 # --- Self-signed TLS (internal instance; front with a real cert/proxy for production) ---
 - name: Generate self-signed TLS cert

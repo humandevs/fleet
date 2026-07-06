@@ -8,9 +8,9 @@ mkdir C:\isos -Force
 curl.exe -L -o C:\isos\Rocky-9-latest-x86_64-minimal.iso `
   https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9-latest-x86_64-minimal.iso
 
-# 2. Build the appliance VM (no SSH key needed — uses password auth):
+# 2. Build the appliance VM from your LOCAL working tree (no SSH key, no repo token needed):
 cd human\appliance
-.\Build-FleetAppliance.ps1 -RepoUrl https://github.com/your-org/fleet.git -AdminPassword 'SetAStrongOne'
+.\Build-FleetAppliance.ps1 -AdminPassword 'SetAStrongOne'
 
 # 3. Watch it come up, then open the UI:
 vmconnect.exe localhost fleet-prod
@@ -28,13 +28,20 @@ fork, community plugins, native systemd service). No interactive install, no man
 
 ```
 Build-FleetAppliance.ps1
-  ├─ render rocky-fleet.ks.template → ks.cfg        (hostname, admin user, SSH key, fork repo/branch)
-  ├─ build OEMDRV ISO with ks.cfg                    (Anaconda auto-loads it — no boot-param editing)
-  ├─ create Gen-2 VM + attach Rocky ISO + OEMDRV ISO + start
+  ├─ package the LOCAL working tree → FLEETSRC ISO   (default; private repo + uncommitted work, no token)
+  ├─ render rocky-fleet.ks.template → ks.cfg         (hostname, admin user, SSH key)
+  ├─ build OEMDRV ISO with ks.cfg                     (Anaconda auto-loads it — no boot-param editing)
+  ├─ create Gen-2 VM + attach Rocky ISO + OEMDRV ISO + FLEETSRC ISO + start
   └─ (in the VM) Rocky installs unattended → reboots
-       └─ fleet-firstboot.service runs: ansible-playbook -i inventory/localhost.ini site.yml
-            → Docker Compose deps + build Fleet + plugins + systemd service
+       └─ fleet-firstboot.service: extract FLEETSRC → /opt/fleet-src, then
+          ansible-playbook -i inventory/localhost.ini site.yml
+            → Docker Compose deps + build Fleet + plugins + systemd service → /healthz smoke check
 ```
+
+**Source is local by default** — the script packages your working tree (relative to `human\appliance`, i.e.
+the repo root) onto a `FLEETSRC` ISO the VM extracts on first boot. No git access to the private repo, and
+it captures **uncommitted** changes. Pass `-RepoUrl https://<token>@github.com/...` to git-clone a remote
+instead; `-RepoSource <path>` to point at a different local checkout.
 
 ## Run it (elevated PowerShell on the Hyper-V host)
 
