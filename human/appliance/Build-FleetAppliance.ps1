@@ -1,0 +1,165 @@
+#requires -RunAsAdministrator
+<#
+.SYNOPSIS
+  Build a self-provisioning Fleet appliance VM on Hyper-V: create the VM, unattended-install Rocky 9 via a
+  kickstart on an OEMDRV ISO, then let the box provision itself (Docker Compose deps + Fleet CE build +
+  community plugins) on first boot via Ansible-against-localhost.
+
+.DESCRIPTION
+  End-to-end, no interactive install steps. Steps performed:
+    1. Render rocky-fleet.ks.template -> ks.cfg (hostname, admin user, SSH key, fork repo/branch).
+    2. Build a tiny ISO labeled OEMDRV containing ks.cfg (Anaconda auto-loads it — no boot-param editing).
+    3. Create a Gen-2 VM, attach the Rocky ISO (boot) + the OEMDRV ISO (kickstart), start it.
+    4. Rocky installs unattended, reboots, and the fleet-firstboot systemd unit runs the Ansible playbook.
+
+  Rocky has no "LTSB" (that's Windows terminology) — the Rocky 9 line is supported ~10 years (to 2032), and
+  -RockyIso defaults to the 9-latest minimal ISO. Pin an exact point release for reproducibility if desired.
+
+.EXAMPLE
+  # Bring your own SSH key:
+  .\Build-FleetAppliance.ps1 -SshPublicKeyPath $HOME\.ssh\id_ed25519.pub `
+    -RepoUrl https://github.com/your-org/fleet.git -Branch human-dev
+
+.EXAMPLE
+  # No key yet — let the script generate one (saved under <VMPath>\<VMName>-ssh):
+  .\Build-FleetAppliance.ps1 -GenerateSshKey -RepoUrl https://github.com/your-org/fleet.git
+
+.EXAMPLE
+  # No key in the image at all — password auth (user 'fleet' / -AdminPassword):
+  .\Build-FleetAppliance.ps1 -AdminPassword 'S3tSomething' -RepoUrl https://github.com/your-org/fleet.git
+#>
+[CmdletBinding()]
+param(
+  [string]$VMName        = "fleet-prod",
+  [string]$VMPath        = "C:\HyperV",
+  [string]$RockyIso      = "C:\isos\Rocky-9-latest-x86_64-minimal.iso",
+  [string]$SwitchName    = "Default Switch",
+  [string]$SshPublicKeyPath,                    # optional: bring your own public key
+  [switch]$GenerateSshKey,                       # optional: create a fresh keypair for this appliance
+  [string]$AdminUser     = "fleet",
+  [string]$AdminPassword = "fleet-appliance",   # console + password-SSH login. CHANGE for anything exposed.
+  [Parameter(Mandatory)][string]$RepoUrl,       # for a PRIVATE fork use https://<token>@github.com/org/fleet.git
+  [string]$Branch        = "human-dev",
+  [int]$Cpu              = 4,
+  [int64]$MemoryStartup  = 4GB,
+  [int64]$MemoryMax      = 8GB,
+  [int64]$DiskSize       = 60GB
+)
+
+$ErrorActionPreference = "Stop"
+$here = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# --- Minimal IMAPI2-based ISO builder (no Windows ADK / oscdimg needed). Sets the volume label. ---
+function New-DataIso {
+  param([string]$SourceDir, [string]$IsoPath, [string]$VolumeLabel)
+  if (-not ("IsoFileWriter" -as [type])) {
+    Add-Type -TypeDefinition @"
+using System;
+using System.IO;
+using System.Runtime.InteropServices.ComTypes;
+public static class IsoFileWriter {
+  public static void Write(object stream, string path) {
+    var i = (IStream)stream;
+    var fs = File.Create(path);
+    var buf = new byte[2048]; int read = 0; IntPtr pRead = Marshal.AllocHGlobal(4);
+    try {
+      do { i.Read(buf, buf.Length, pRead); read = Marshal.ReadInt32(pRead); if (read>0) fs.Write(buf,0,read); }
+      while (read == buf.Length);
+    } finally { fs.Flush(); fs.Close(); Marshal.FreeHGlobal(pRead); }
+  }
+}
+"@
+  }
+  $fsi = New-Object -ComObject IMAPI2FS.MsftFileSystemImage
+  $fsi.FileSystemsToCreate = 3   # ISO9660 + Joliet
+  $fsi.VolumeName = $VolumeLabel
+  $fsi.Root.AddTree($SourceDir, $false)
+  $result = $fsi.CreateResultImage()
+  [IsoFileWriter]::Write($result.ImageStream, $IsoPath)
+}
+
+# --- 0. Resolve SSH access mode: key (given), key (generated), or password-only (no key in the image) ---
+if ($GenerateSshKey) {
+  $keyDir = Join-Path $VMPath "$VMName-ssh"
+  New-Item -ItemType Directory -Force -Path $keyDir | Out-Null
+  $genKey = Join-Path $keyDir "id_ed25519"
+  if (-not (Test-Path $genKey)) {
+    Write-Host "==> Generating SSH keypair (no passphrase) at $genKey ..."
+    & ssh-keygen -t ed25519 -C "fleet-appliance-$VMName" -f $genKey -N '""' -q
+    if ($LASTEXITCODE -ne 0) { throw "ssh-keygen failed. Ensure the OpenSSH client is installed (Windows 10/11 includes it)." }
+  }
+  $SshPublicKeyPath = "$genKey.pub"
+  Write-Host "    Private key: $genKey   (connect with: ssh -i $genKey $AdminUser@<vm-ip>)" -ForegroundColor Cyan
+}
+
+$sshLine = ""
+if ($SshPublicKeyPath) {
+  if (-not (Test-Path $SshPublicKeyPath)) { throw "SSH public key not found: $SshPublicKeyPath" }
+  $sshKey  = (Get-Content -Raw $SshPublicKeyPath).Trim()
+  $sshLine = "sshkey --username=$AdminUser `"$sshKey`""
+  Write-Host "==> SSH access: key ($SshPublicKeyPath)"
+} else {
+  Write-Host "==> SSH access: PASSWORD only — no key baked into the image." -ForegroundColor Yellow
+  Write-Host "    Log in with user '$AdminUser' / -AdminPassword (console or 'ssh $AdminUser@<vm-ip>')."
+  Write-Host "    Add a key after first login and disable password auth for anything exposed." -ForegroundColor Yellow
+}
+
+# --- 1. Render the kickstart from the template ---
+Write-Host "==> Rendering kickstart..."
+$ks = Get-Content -Raw (Join-Path $here "rocky-fleet.ks.template")
+$ks = $ks.Replace("@@HOSTNAME@@",    $VMName).
+          Replace("@@USERNAME@@",    $AdminUser).
+          Replace("@@PASSWORD@@",    $AdminPassword).
+          Replace("@@SSHKEY_LINE@@", $sshLine).
+          Replace("@@REPO@@",        $RepoUrl).
+          Replace("@@BRANCH@@",      $Branch)
+
+$stage = Join-Path $env:TEMP "fleet-oemdrv"
+New-Item -ItemType Directory -Force -Path $stage | Out-Null
+# Anaconda looks for a file named exactly ks.cfg on the OEMDRV volume. Write LF-only (no CRLF).
+[IO.File]::WriteAllText((Join-Path $stage "ks.cfg"), ($ks -replace "`r`n","`n"))
+
+# --- 2. Build the OEMDRV kickstart ISO ---
+Write-Host "==> Building OEMDRV kickstart ISO..."
+New-Item -ItemType Directory -Force -Path $VMPath | Out-Null
+$oemIso = Join-Path $VMPath "$VMName-oemdrv.iso"
+if (Test-Path $oemIso) { Remove-Item $oemIso -Force }
+New-DataIso -SourceDir $stage -IsoPath $oemIso -VolumeLabel "OEMDRV"
+
+# --- 3. Create + configure the VM ---
+Write-Host "==> Creating VM $VMName..."
+if (Get-VM -Name $VMName -ErrorAction SilentlyContinue) {
+  throw "VM '$VMName' already exists. Remove it first: Stop-VM $VMName -Force; Remove-VM $VMName -Force"
+}
+$vhd = Join-Path $VMPath "$VMName.vhdx"
+New-VM -Name $VMName -Generation 2 -MemoryStartupBytes $MemoryStartup `
+  -NewVHDPath $vhd -NewVHDSizeBytes $DiskSize -SwitchName $SwitchName | Out-Null
+Set-VMProcessor $VMName -Count $Cpu
+Set-VMMemory    $VMName -DynamicMemoryEnabled $true -MinimumBytes 2GB -MaximumBytes $MemoryMax
+Set-VM $VMName -AutomaticStartAction StartIfRunning -AutomaticStopAction Save -CheckpointType Disabled
+
+# Rocky boot ISO + the OEMDRV kickstart ISO.
+Add-VMDvdDrive $VMName -Path $RockyIso
+Add-VMDvdDrive $VMName -Path $oemIso
+# Boot the Rocky install DVD first.
+$bootDvd = Get-VMDvdDrive $VMName | Where-Object { $_.Path -eq $RockyIso }
+Set-VMFirmware $VMName -FirstBootDevice $bootDvd
+# Rocky is signed under the MS UEFI CA — keep Secure Boot on with that template.
+Set-VMFirmware $VMName -SecureBootTemplate MicrosoftUEFICertificateAuthority
+
+Write-Host "==> Starting VM (unattended Rocky install begins now)..."
+Start-VM $VMName
+
+Write-Host ""
+Write-Host "Appliance build kicked off. What happens next, hands-off:" -ForegroundColor Green
+Write-Host "  * Rocky installs from the kickstart, then reboots and ejects the install media."
+Write-Host "  * On first boot, fleet-firstboot.service runs the Ansible playbook: Docker Compose"
+Write-Host "    (MySQL + Redis) + builds Fleet CE from $Branch + community plugins + systemd service."
+Write-Host ""
+Write-Host "Watch the console:   vmconnect.exe localhost $VMName"
+Write-Host "Find the IP once up:  Get-VMNetworkAdapter -VMName $VMName | Select IPAddresses"
+Write-Host "Provision log (SSH):  sudo tail -f /var/log/fleet-firstboot.log"
+Write-Host "Fleet UI when done:   https://<vm-ip>:8080"
+Write-Host ""
+Write-Host "NOTE: after install completes you can detach the OEMDRV ISO (contains the kickstart):"
+Write-Host "  Get-VMDvdDrive $VMName | Where-Object Path -eq '$oemIso' | Remove-VMDvdDrive"

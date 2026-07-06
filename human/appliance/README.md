@@ -1,0 +1,72 @@
+# Fleet appliance — one-command build
+
+Build a **self-provisioning** Fleet VM: one PowerShell command creates the Hyper-V VM, unattended-installs
+Rocky 9, and the box provisions itself on first boot (Docker Compose MySQL + Redis, builds Fleet CE from our
+fork, community plugins, native systemd service). No interactive install, no manual Ansible run.
+
+```
+Build-FleetAppliance.ps1
+  ├─ render rocky-fleet.ks.template → ks.cfg        (hostname, admin user, SSH key, fork repo/branch)
+  ├─ build OEMDRV ISO with ks.cfg                    (Anaconda auto-loads it — no boot-param editing)
+  ├─ create Gen-2 VM + attach Rocky ISO + OEMDRV ISO + start
+  └─ (in the VM) Rocky installs unattended → reboots
+       └─ fleet-firstboot.service runs: ansible-playbook -i inventory/localhost.ini site.yml
+            → Docker Compose deps + build Fleet + plugins + systemd service
+```
+
+## Run it (elevated PowerShell on the Hyper-V host)
+
+```powershell
+cd human\infra\appliance
+.\Build-FleetAppliance.ps1 `
+  -SshPublicKeyPath $HOME\.ssh\id_ed25519.pub `
+  -RepoUrl https://github.com/your-org/fleet.git `
+  -Branch human-dev
+```
+
+Common overrides: `-VMName`, `-RockyIso`, `-SwitchName "fleet-ext"`, `-Cpu 4`, `-DiskSize 80GB`,
+`-AdminUser fleet`, `-AdminPassword <pw>`.
+
+- **Private fork?** Pass a token in the URL: `-RepoUrl https://<PAT>@github.com/your-org/fleet.git` (the
+  firstboot clone needs read access). Use a read-only deploy token; it lands in the VM's provision script.
+- **Rocky ISO:** defaults to `C:\isos\Rocky-9-latest-x86_64-minimal.iso`. Rocky has **no "LTSB"** — the
+  Rocky 9 line is ~10-year supported (to 2032); `9-latest` tracks the newest point release on that line.
+  Pin an exact release (e.g. `Rocky-9.6-x86_64-minimal.iso`) for byte-reproducible builds.
+
+## Watch / verify
+
+```powershell
+vmconnect.exe localhost fleet-prod                                  # console
+Get-VMNetworkAdapter -VMName fleet-prod | Select-Object IPAddresses # the IP once networked
+```
+```bash
+ssh fleet@<vm-ip> "sudo tail -f /var/log/fleet-firstboot.log"       # provisioning progress
+# when done: https://<vm-ip>:8080   (then human/verify: npm run smoke against it)
+```
+
+**Timing:** the VM comes up in a couple of minutes; first-boot provisioning then takes ~10–20 min (it does
+a full `yarn install` + webpack + `go build` of the fork). It's a one-time bake — subsequent
+`ansible-playbook` runs (or a future golden image) are fast.
+
+## How it's a true appliance
+
+- **No interactive steps** — the kickstart (`rocky-fleet.ks.template`) drives disk, user, SSH key, packages;
+  Anaconda auto-loads it from the OEMDRV-labeled ISO the script builds (via IMAPI2 — no Windows ADK needed).
+- **Self-contained provisioning** — `fleet-firstboot.service` runs the same Ansible playbook we use for
+  push provisioning, but with `inventory/localhost.ini` (`connection: local`). Same roles, same result.
+- **Unique per appliance** — first boot generates this box's own `fleet_server_private_key` (encrypts
+  secrets at rest); no shared key baked into an image.
+- **Idempotent + repeatable** — re-runnable for the DR spare or future per-client instances; the natural
+  next step for many instances is baking a golden image (Packer, same playbook) so provisioning is instant.
+
+## Files
+
+| File | Role |
+|---|---|
+| `Build-FleetAppliance.ps1` | Host-side orchestrator: kickstart render, OEMDRV ISO, VM create/start |
+| `rocky-fleet.ks.template` | Unattended Rocky install + first-boot self-provision service |
+| `./ansible/inventory/localhost.ini` | Local-connection inventory the appliance provisions against |
+| `./ansible/` | The playbook/roles (Docker deps + native Fleet) — shared with push provisioning |
+
+For the manual, step-by-step equivalent (understand what the script automates), see
+[./hyperv-rocky-setup.md](./hyperv-rocky-setup.md).

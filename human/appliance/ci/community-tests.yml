@@ -3,7 +3,7 @@
 # Copy to .github/workflows/ on the fork to enable. Brings up the repo's OWN docker-compose test services
 # (mysql_test on 3307, redis on 6379) so the MySQL flags the integration harness needs (GTID enforcement,
 # max_allowed_packet, root/toor) can't drift from what the code expects. This is the containerized twin of
-# the Ansible `mysql` role — both stand MySQL up as part of the setup. See human/infra/ansible/README.md §7.
+# the Ansible `mysql` role — both stand MySQL up as part of the setup. See human/appliance/ansible/README.md §7.
 
 name: community-tests
 

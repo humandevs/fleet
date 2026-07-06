@@ -1,7 +1,7 @@
 # Managing Fleet-instance VMs: creation, config, DR, and scaling
 
 How to create and manage state on the Fleet VM(s): one prod instance now + one DR warm spare, scaling to
-many per-client Fleet instances later. Companion: [verify/README.md](./verify/README.md) (the single-VM
+many per-client Fleet instances later. Companion: [verify/README.md](../verify/README.md) (the single-VM
 bring-up).
 
 ## TL;DR recommendation
@@ -41,7 +41,7 @@ Even for the first VM, make it reproducible so the DR spare and future instances
 
 ## 2. State management — Ansible layout
 
-One repo (`infra/` or a sibling repo), one playbook, roles per concern:
+One repo (`human/appliance/ansible/` here, or a sibling repo), one playbook, roles per concern:
 
 ```
 roles/

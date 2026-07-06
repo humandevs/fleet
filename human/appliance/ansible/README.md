@@ -6,7 +6,7 @@ on Windows*, which needed WSL2); the **Fleet server runs native** (systemd binar
 Fleet's own dev model — compose provides the deps, you run the server against them — and it means the DB
 config (GTID flags, `max_allowed_packet`, users) can't drift from what the code expects. The same compose
 services drive CI (§7). To move the DB to a separate box later, drop the `deps` role and point
-`fleet_mysql_address` elsewhere. Strategy/why: [../../INFRA-vm-management.md](../../INFRA-vm-management.md).
+`fleet_mysql_address` elsewhere. Strategy/why: [../VM-MANAGEMENT.md](../VM-MANAGEMENT.md).
 
 ## 0. Prereqs
 
@@ -40,7 +40,7 @@ a separate box later: drop the `deps` role and set `fleet_mysql_address` to the 
 
 ## 3. Configure Ansible
 
-From this directory (`human/infra/ansible/`):
+From this directory (`human/appliance/ansible/`):
 
 ```bash
 # 1. Inventory: set the VM IP + SSH user
@@ -119,4 +119,4 @@ juggling — `mysql_test` is 3307 in both. Standing MySQL up via compose *is* th
 When the spare exists: uncomment `fleet-dr` in `inventory/hosts.ini`, add `group_vars/fleet_dr.yml` with
 `fleet_service_state: stopped` and `fleet_run_migrations: false`, and run the **same** playbook with
 `--limit fleet_dr`. Identical build; service idle until failover. DR data currency = MySQL replication on
-the LAN box (async replica at the DR site) — see [../../INFRA-vm-management.md](../../INFRA-vm-management.md) §3.
+the LAN box (async replica at the DR site) — see [../VM-MANAGEMENT.md](../VM-MANAGEMENT.md) §3.

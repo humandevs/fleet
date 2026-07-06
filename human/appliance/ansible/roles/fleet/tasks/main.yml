@@ -47,7 +47,7 @@
     openssl req -x509 -newkey rsa:2048 -nodes
     -keyout {{ fleet_tls_dir }}/fleet.key
     -out {{ fleet_tls_dir }}/fleet.crt
-    -days 825 -subj "/CN={{ ansible_host }}"
+    -days 825 -subj "/CN={{ ansible_host | default(ansible_default_ipv4.address, true) | default(inventory_hostname, true) }}"
   args:
     creates: "{{ fleet_tls_dir }}/fleet.crt"
 

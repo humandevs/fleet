@@ -1,0 +1,92 @@
+# Fleet appliance kickstart (Rocky 9) — unattended install + first-boot self-provision.
+# Placeholders (@@...@@) are filled by Build-FleetAppliance.ps1. Anaconda auto-loads this when it's on a
+# volume labeled OEMDRV named ks.cfg — no boot-param editing needed.
+
+text
+lang en_US.UTF-8
+keyboard us
+timezone Etc/UTC --utc
+
+# Networking: DHCP, set the hostname.
+network --bootproto=dhcp --device=link --activate --hostname=@@HOSTNAME@@
+
+# Disk: wipe and auto LVM layout on the single VHDX.
+zerombr
+clearpart --all --initlabel
+autopart --type=lvm
+bootloader --location=mbr
+
+# Security + accounts. The admin user always gets a password (console + optional password SSH). An SSH key
+# is added only if one was supplied (@@SSHKEY_LINE@@ is empty otherwise — see Build-FleetAppliance.ps1).
+rootpw --lock
+selinux --enforcing
+firewall --enabled --service=ssh
+user --name=@@USERNAME@@ --groups=wheel --plaintext --password=@@PASSWORD@@
+@@SSHKEY_LINE@@
+services --enabled=sshd
+
+reboot --eject
+
+%packages
+@^minimal-environment
+openssh-server
+git
+%end
+
+# --- First-boot self-provision: install Ansible, clone the fork, run the playbook against localhost. ---
+%post --log=/root/ks-post.log
+set -eux
+
+# passwordless sudo for the admin (key-based appliance)
+echo "@@USERNAME@@ ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-fleet-appliance
+chmod 0440 /etc/sudoers.d/90-fleet-appliance
+
+install -d -m 0755 /usr/local/sbin
+cat > /usr/local/sbin/fleet-firstboot.sh <<'FIRSTBOOT'
+#!/bin/bash
+# One-shot appliance provisioning. Logs to /var/log/fleet-firstboot.log.
+set -euxo pipefail
+exec > /var/log/fleet-firstboot.log 2>&1
+
+dnf install -y ansible-core git
+
+REPO_DIR=/opt/fleet-appliance
+if [ ! -d "$REPO_DIR/.git" ]; then
+  git clone --branch "@@BRANCH@@" "@@REPO@@" "$REPO_DIR"
+else
+  git -C "$REPO_DIR" pull --ff-only
+fi
+
+cd "$REPO_DIR/human/appliance/ansible"
+
+# Generate this appliance's unique server private key (encrypts secrets at rest) once.
+if [ ! -f group_vars/vault.yml ]; then
+  umask 077
+  echo "fleet_server_private_key: \"$(openssl rand -base64 32)\"" > group_vars/vault.yml
+fi
+
+ansible-galaxy collection install -r requirements.yml
+ansible-playbook -i inventory/localhost.ini site.yml
+FIRSTBOOT
+chmod 0755 /usr/local/sbin/fleet-firstboot.sh
+
+cat > /etc/systemd/system/fleet-firstboot.service <<'UNIT'
+[Unit]
+Description=Fleet appliance first-boot provisioning
+After=network-online.target
+Wants=network-online.target
+ConditionPathExists=!/var/lib/fleet-appliance/.provisioned
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/fleet-firstboot.sh
+ExecStartPost=/usr/bin/mkdir -p /var/lib/fleet-appliance
+ExecStartPost=/usr/bin/touch /var/lib/fleet-appliance/.provisioned
+
+[Install]
+WantedBy=multi-user.target
+UNIT
+
+systemctl enable fleet-firstboot.service
+%end
