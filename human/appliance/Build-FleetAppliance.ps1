@@ -61,6 +61,15 @@ param(
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 
+# Timestamped logging so it's always clear which step is running (and that it isn't stalled).
+$script:BuildStart = Get-Date
+function Log {
+  param([string]$Message, [ConsoleColor]$Color = [ConsoleColor]::Gray)
+  $el = [int]((Get-Date) - $script:BuildStart).TotalSeconds
+  Write-Host ("[{0} +{1,4}s] {2}" -f (Get-Date -Format 'HH:mm:ss'), $el, $Message) -ForegroundColor $Color
+}
+Log "Fleet appliance build starting (VM: $VMName)" Cyan
+
 # Admin password: if none supplied, generate a strong random one (no hardcoded default) and print it.
 # Alphanumeric only (no ambiguous 0/O/1/l/I, no symbols) so it is safe in the kickstart --password= value.
 $generatedPw = $false
@@ -197,7 +206,7 @@ if (-not $RepoUrl) {
   if (-not (Test-Path (Join-Path $RepoSource "go.mod"))) {
     throw "RepoSource '$RepoSource' doesn't look like the Fleet repo (no go.mod). Pass -RepoSource <path> or -RepoUrl <url>."
   }
-  Write-Host "==> Source: LOCAL working tree at $RepoSource (packaged onto a FLEETSRC ISO - no repo network access needed)."
+  Log "Source: LOCAL working tree at $RepoSource (packaged onto a FLEETSRC ISO - no repo network access needed)."
   # Fresh unique stage dir each run: a stale prior fleet-src.tar.gz can be briefly locked by antivirus after a
   # big write, which makes Remove-Item (silent) leave it and tar then "fails to open" the output. A new GUID
   # path can never be locked. Best-effort sweep of old stage dirs.
@@ -206,7 +215,8 @@ if (-not $RepoUrl) {
   $srcStage = Join-Path $env:TEMP ("fleet-src-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))
   New-Item -ItemType Directory -Force -Path $srcStage | Out-Null
   $tgz = Join-Path $srcStage "fleet-src.tar.gz"
-  Write-Host "    Archiving working tree (excluding .git / node_modules / build; captures uncommitted work)..."
+  Log "Archiving working tree (excluding .git / node_modules / build; captures uncommitted work)..."
+  Write-Host "    This can take 1-3 min for a large tree (antivirus scans each file); live size below." -ForegroundColor DarkGray
   # Windows bsdtar strips the leading './' before matching --exclude, so a top-level dir needs a BARE pattern
   # (.git), while nested ones need '*/' (*/.git for submodules). An --exclude-from file also dodges
   # PowerShell's native-argument quoting. (Confirmed against bsdtar 3.8.4.)
@@ -214,15 +224,24 @@ if (-not $RepoUrl) {
   @('.git','.git/*','*/.git','*/.git/*','*node_modules*','build','build/*',
     '.cache','.cache/*','*/.cache','*/.cache/*','*.vhdx') | Set-Content -Encoding Ascii $exFile
   $tarExe = Join-Path $env:SystemRoot "System32\tar.exe"   # absolute path -> guaranteed Windows bsdtar, not a PATH tar
-  & $tarExe -czf $tgz -C $RepoSource --exclude-from=$exFile .
-  if ($LASTEXITCODE -ne 0) { throw "tar failed packaging the repo. Ensure $tarExe exists (Windows 10/11 includes it)." }
-  Write-Host ("    Archive: {0} MB (build version metadata will be blank - no .git; fine for dev)." -f [math]::Round((Get-Item $tgz).Length/1MB))
+  # Run tar as a child process and poll the growing .tar.gz so the user sees live progress (not a frozen line).
+  $tarArgs = '-czf "{0}" -C "{1}" --exclude-from="{2}" .' -f $tgz, $RepoSource, $exFile
+  $sw = [System.Diagnostics.Stopwatch]::StartNew()
+  $proc = Start-Process -FilePath $tarExe -ArgumentList $tarArgs -NoNewWindow -PassThru
+  while (-not $proc.HasExited) {
+    Start-Sleep -Milliseconds 700
+    $mb = if (Test-Path $tgz) { [math]::Round((Get-Item $tgz).Length / 1MB) } else { 0 }
+    Write-Host ("`r      ...{0,6} MB written  ({1}s elapsed)   " -f $mb, [int]$sw.Elapsed.TotalSeconds) -NoNewline
+  }
+  $proc.WaitForExit(); $sw.Stop(); Write-Host ""
+  if ($proc.ExitCode -ne 0) { throw "tar failed (exit $($proc.ExitCode)). Ensure $tarExe exists (Windows 10/11 includes it)." }
+  Log ("Archived {0} MB in {1}s (build version metadata will be blank - no .git; fine for dev)." -f [math]::Round((Get-Item $tgz).Length/1MB), [int]$sw.Elapsed.TotalSeconds) Green
 } else {
   Write-Host "==> Source: REMOTE git ($RepoUrl @ $Branch)."
 }
 
 # --- 1. Render the kickstart from the template ---
-Write-Host "==> Rendering kickstart..."
+Log "Rendering kickstart..."
 $ks = Get-Content -Raw (Join-Path $here "rocky-fleet.ks.template")
 $ks = $ks.Replace("@@HOSTNAME@@",    $VMName).
           Replace("@@USERNAME@@",    $AdminUser).
@@ -237,7 +256,7 @@ New-Item -ItemType Directory -Force -Path $stage | Out-Null
 [IO.File]::WriteAllText((Join-Path $stage "ks.cfg"), ($ks -replace "`r`n","`n"))
 
 # --- 2. Build the OEMDRV kickstart ISO ---
-Write-Host "==> Building OEMDRV kickstart ISO..."
+Log "Building OEMDRV kickstart ISO (tiny)..."
 New-Item -ItemType Directory -Force -Path $VMPath | Out-Null
 $oemIso = Join-Path $VMPath "$VMName-oemdrv.iso"
 if (Test-Path $oemIso) { Remove-Item $oemIso -Force }
@@ -246,14 +265,18 @@ New-DataIso -SourceDir $stage -IsoPath $oemIso -VolumeLabel "OEMDRV"
 # FLEETSRC ISO (local mode): the working-tree archive the VM extracts on first boot.
 $srcIso = $null
 if ($srcStage) {
-  Write-Host "==> Building FLEETSRC source ISO..."
+  $srcMb = [math]::Round((Get-Item $tgz).Length / 1MB)
+  Log ("Building FLEETSRC source ISO (~{0} MB; can take a minute)..." -f $srcMb)
   $srcIso = Join-Path $VMPath "$VMName-fleetsrc.iso"
   if (Test-Path $srcIso) { Remove-Item $srcIso -Force }
+  $isoSw = [System.Diagnostics.Stopwatch]::StartNew()
   New-DataIso -SourceDir $srcStage -IsoPath $srcIso -VolumeLabel "FLEETSRC"
+  $isoSw.Stop()
+  Log ("FLEETSRC ISO done in {0}s." -f [int]$isoSw.Elapsed.TotalSeconds) Green
 }
 
 # --- 3. Create + configure the VM ---
-Write-Host "==> Creating VM $VMName..."
+Log "Creating VM $VMName..."
 if (Get-VM -Name $VMName -ErrorAction SilentlyContinue) {
   throw "VM '$VMName' already exists. Tear it down first:  .\Reset-FleetVM.ps1 -VMName $VMName"
 }
@@ -329,7 +352,7 @@ Set-VMFirmware $VMName -FirstBootDevice $bootDvd
 # Rocky is signed under the MS UEFI CA - keep Secure Boot on with that template.
 Set-VMFirmware $VMName -SecureBootTemplate MicrosoftUEFICertificateAuthority
 
-Write-Host "==> Starting VM (unattended Rocky install begins now)..."
+Log "Starting VM (unattended Rocky install begins now)..." Cyan
 Start-VM $VMName
 
 Write-Host ""
