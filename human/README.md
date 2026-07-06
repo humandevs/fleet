@@ -1,5 +1,7 @@
 # `human/`
 
+v0.1.0 - Initial test build
+
 Company namespace for our FleetDM fork — strategy, architecture decisions, and fork-specific
 documentation that is **not** part of upstream Fleet.
 
