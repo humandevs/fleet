@@ -16,16 +16,33 @@ Build-FleetAppliance.ps1
 
 ## Run it (elevated PowerShell on the Hyper-V host)
 
+Pick one of the three SSH-access modes below; only `-RepoUrl` is required.
+
 ```powershell
-cd human\infra\appliance
-.\Build-FleetAppliance.ps1 `
-  -SshPublicKeyPath $HOME\.ssh\id_ed25519.pub `
-  -RepoUrl https://github.com/your-org/fleet.git `
-  -Branch human-dev
+cd human\appliance
+.\Build-FleetAppliance.ps1 -RepoUrl https://github.com/your-org/fleet.git -Branch human-dev `
+  <one of the SSH options below>
 ```
 
 Common overrides: `-VMName`, `-RockyIso`, `-SwitchName "fleet-ext"`, `-Cpu 4`, `-DiskSize 80GB`,
 `-AdminUser fleet`, `-AdminPassword <pw>`.
+
+### SSH access — you don't need a key already
+
+The `fleet` admin user always gets a password (console + password SSH). A key is embedded **only** if you
+supply one. Three ways:
+
+1. **Have a key** → embed it: `-SshPublicKeyPath $HOME\.ssh\id_ed25519.pub`
+2. **No key yet, want one** → `-GenerateSshKey` (script runs `ssh-keygen`, saves the pair to
+   `<VMPath>\<VMName>-ssh\`; only the public half is embedded). Connect later with
+   `ssh -i C:\HyperV\fleet-prod-ssh\id_ed25519 fleet@<vm-ip>`. (Or generate manually:
+   `ssh-keygen -t ed25519 -f $HOME\.ssh\id_ed25519`, then use option 1.)
+3. **No key in the image at all** → omit both and log in by **password**: `-AdminPassword 'SetAStrongOne'`,
+   then `ssh fleet@<vm-ip>` (or the Hyper-V console). Fine for an internal/lab box; for anything exposed,
+   add a key after first login and set `PasswordAuthentication no` in `/etc/ssh/sshd_config`.
+
+> Windows 10/11 ship the OpenSSH client (`ssh`, `ssh-keygen`) for options 1–2. If missing:
+> `Add-WindowsCapability -Online -Name OpenSSH.Client~~~~0.0.1.0`.
 
 - **Private fork?** Pass a token in the URL: `-RepoUrl https://<PAT>@github.com/your-org/fleet.git` (the
   firstboot clone needs read access). Use a read-only deploy token; it lands in the VM's provision script.
