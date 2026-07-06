@@ -25,6 +25,9 @@
   ansible.builtin.shell: |
     set -e
     export PATH=$PATH:/usr/local/go/bin
+    # firstboot runs under systemd with no HOME, so Go can't derive GOPATH/GOCACHE ("neither GOMODCACHE
+    # nor GOPATH is set"). Give it one (push mode already has HOME=/home/fleetadmin, so keep it if set).
+    export HOME="${HOME:-/root}"
     make deps
     make generate
     make build
