@@ -86,6 +86,8 @@ sudo mkdir -p /opt/fleet-src
 sudo chown -R "$(whoami)" /opt/fleet-src
 tar -xzf /tmp/fleet-src.tar.gz -C /opt/fleet-src && rm -f /tmp/fleet-src.tar.gz
 cd /opt/fleet-src
+# make generate runs 'git clean -fx assets' which needs a repo; recreate one if .git is absent.
+[ -d .git ] || { git init -q && git add -A && git -c user.email=appliance@fleet.local -c user.name=fleet-appliance commit -q -m "appliance base"; }
 export PATH=$PATH:/usr/local/go/bin
 echo "== make deps ==";     make deps
 echo "== make generate =="; make generate

@@ -119,3 +119,17 @@
     path: "{{ fleet_src_dir }}/go.mod"
   register: fleet_src_final
   failed_when: not fleet_src_final.stat.exists
+
+# The local-source tarball excludes .git (size), but 'make generate' runs 'git clean -fx assets', which
+# HARD-fails without a repo. Recreate one: git add -A respects .gitignore, so tracked source (fonts, favicon)
+# vs generated bundles is known and 'git clean -fx assets' behaves like a real checkout (also stamps a
+# version). Skipped when .git already exists (push mode's git clone).
+- name: Ensure the Fleet source is a git repo (needed by make generate)
+  ansible.builtin.shell: |
+    set -e
+    cd {{ fleet_src_dir }}
+    git init -q
+    git add -A
+    git -c user.email=appliance@fleet.local -c user.name=fleet-appliance commit -q -m "appliance base"
+  args:
+    creates: "{{ fleet_src_dir }}/.git"

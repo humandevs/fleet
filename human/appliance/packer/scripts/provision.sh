@@ -15,6 +15,12 @@ if [ -f /tmp/fleet-src.tar.gz ]; then
 else
   git clone --branch "$BRANCH" "$REPO_URL" "$FLEET_SRC"
 fi
+# make generate runs 'git clean -fx assets' which needs a repo; recreate one if the source lacks .git.
+if [ ! -d "$FLEET_SRC/.git" ]; then
+  ( cd "$FLEET_SRC" && git init -q && git add -A && \
+    git -c user.email=appliance@fleet.local -c user.name=fleet-appliance commit -q -m "appliance base" )
+fi
+
 cd "$FLEET_SRC/human/appliance/ansible"
 
 # Throwaway key so the fleet role's template renders; replaced per-clone by the personalize service.
