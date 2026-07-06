@@ -50,7 +50,13 @@ cat > /usr/local/sbin/fleet-firstboot.sh <<'FIRSTBOOT'
 set -euxo pipefail
 exec > /var/log/fleet-firstboot.log 2>&1
 
-dnf install -y ansible-core git
+# tar + gzip: NOT on the Rocky minimal install, but needed to extract the FLEETSRC source archive below.
+dnf install -y ansible-core git tar gzip
+
+# Hyper-V guest daemons so the HOST can report this VM's IP (Get-VMNetworkAdapter / Watch-FleetVM.ps1).
+# Done first (before the long build) so the IP shows up on the host within a minute or two. Not on the
+# minimal ISO, so it installs from the network here. Non-fatal if it fails.
+dnf install -y hyperv-daemons && systemctl enable --now hypervkvpd || true
 
 # Obtain the Fleet source into /opt/fleet-src. Prefer the LOCAL working tree delivered on the FLEETSRC ISO
 # (private repo, captures uncommitted work — no repo network access); otherwise git-clone the remote.

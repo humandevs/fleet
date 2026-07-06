@@ -8,13 +8,13 @@ mkdir C:\isos -Force
 curl.exe -L -o C:\isos\Rocky-9-latest-x86_64-minimal.iso `
   https://download.rockylinux.org/pub/rocky/9/isos/x86_64/Rocky-9-latest-x86_64-minimal.iso
 
-# 2. Build the appliance VM from your LOCAL working tree (no SSH key, no repo token needed):
+# 2. Build the appliance VM from your LOCAL working tree (no SSH key, no repo token needed).
+#    A random admin password is generated and printed (or pass -AdminPassword to set your own):
 cd human\appliance
-.\Build-FleetAppliance.ps1 -AdminPassword 'SetAStrongOne'
+.\Build-FleetAppliance.ps1 -GenerateSshKey
 
-# 3. Watch it come up, then open the UI:
-vmconnect.exe localhost fleet-prod
-Get-VMNetworkAdapter -VMName fleet-prod | Select-Object IPAddresses   # → https://<ip>:8080
+# 3. Find the IP + wait for Fleet, then open the UI (watcher finds the IP even in NAT mode):
+.\Watch-FleetVM.ps1 -KeyPath C:\HyperV\fleet-prod-ssh\fleet_ceplus_ed25519_a
 ```
 
 First boot self-provisions in ~15 min (Docker deps + builds Fleet). For many VMs, bake a golden image once

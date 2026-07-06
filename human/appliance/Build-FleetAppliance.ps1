@@ -41,7 +41,7 @@ param(
   [string]$SshKeyName    = "fleet_ceplus_ed25519_a",  # -GenerateSshKey key filename; reused across builds
                                                        # so you never get locked out. Override for a distinct key.
   [string]$AdminUser     = "fleet",
-  [string]$AdminPassword = "fleet-appliance",   # console + password-SSH login. CHANGE for anything exposed.
+  [string]$AdminPassword = "",                    # blank => a strong random password is generated + printed
   # Source: LOCAL by default (private repo, and captures uncommitted work) - the local tree is packaged onto
   # a FLEETSRC ISO the VM extracts on first boot, so no git access to the private repo is needed. Defaults to
   # the repo root relative to this script (human\appliance\..\..). Pass -RepoUrl instead to git-clone a
@@ -58,6 +58,19 @@ param(
 
 $ErrorActionPreference = "Stop"
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
+
+# Admin password: if none supplied, generate a strong random one (no hardcoded default) and print it.
+# Alphanumeric only (no ambiguous 0/O/1/l/I, no symbols) so it is safe in the kickstart --password= value.
+$generatedPw = $false
+if (-not $AdminPassword) {
+  $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+  $b = [byte[]]::new(20); $rng.GetBytes($b)
+  $set = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+  $AdminPassword = -join ($b | ForEach-Object { $set[$_ % $set.Length] })
+  $generatedPw = $true
+  Write-Host ("==> Generated admin password for '{0}':  {1}" -f $AdminUser, $AdminPassword) -ForegroundColor Green
+  Write-Host "    SAVE THIS - it is the console / password-SSH login for the VM." -ForegroundColor Yellow
+}
 
 # --- Minimal IMAPI2-based ISO builder (no Windows ADK / oscdimg needed). Sets the volume label. ---
 function New-DataIso {
@@ -259,8 +272,9 @@ Write-Host "  * Rocky installs from the kickstart, then reboots and ejects the i
 Write-Host "  * On first boot, fleet-firstboot.service runs the Ansible playbook: Docker Compose"
 Write-Host "    (MySQL + Redis) + builds Fleet CE from $Branch + community plugins + systemd service."
 Write-Host ""
+Write-Host ("Admin login:          {0} / {1}" -f $AdminUser, $AdminPassword) -ForegroundColor Green
 Write-Host "Watch the console:   vmconnect.exe localhost $VMName"
-Write-Host "Find the IP once up:  Get-VMNetworkAdapter -VMName $VMName | Select IPAddresses"
+Write-Host "Find IP + connect:    .\Watch-FleetVM.ps1$(if($GenerateSshKey){" -KeyPath $genKey"})"
 Write-Host "Provision log (SSH):  sudo tail -f /var/log/fleet-firstboot.log"
 Write-Host "Fleet UI when done:   https://<vm-ip>:8080"
 Write-Host ""

@@ -4,7 +4,8 @@
 # A throwaway server private key is used here only so the playbook completes; generalize.sh strips it.
 set -euxo pipefail
 
-dnf install -y ansible-core git
+# tar + gzip are not on the Rocky minimal install but are needed to extract the source archive.
+dnf install -y ansible-core git tar gzip
 
 # Source into /opt/fleet-src (the single source location the ansible roles expect). Prefer a local archive
 # uploaded by a Packer file provisioner (/tmp/fleet-src.tar.gz); otherwise git-clone the remote.
