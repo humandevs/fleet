@@ -101,6 +101,40 @@ ssh fleet@<vm-ip> "sudo tail -f /var/log/fleet-firstboot.log"       # provisioni
 a full `yarn install` + webpack + `go build` of the fork). It's a one-time bake — subsequent
 `ansible-playbook` runs (or a future golden image) are fast.
 
+## Reset / start fresh
+
+Don't hand-run `Stop-VM`/`Remove-VM`/`Remove-Item` — use the guarded teardown. By default it removes the VM
++ the ISOs it generated (never the Rocky ISO) but **keeps the VHDX** (deleting a disk is irreversible),
+behind a typed confirmation, then validates:
+
+```powershell
+.\Reset-FleetVM.ps1 -VhdxPath C:\isos\      # type the VM name to confirm; the disk is kept
+# then rebuild -- the existing disk is archived to fleet-prod-old-N.vhdx and a fresh disk takes the canonical name:
+.\Build-FleetAppliance.ps1 -GenerateSshKey -VhdxPath C:\isos\
+```
+
+- **Disk safety:** an existing `fleet-prod.vhdx` is never overwritten. On rebuild it's **renamed aside** to
+  `fleet-prod-old-N.vhdx` (kept), so the current disk always has the canonical name — no version tracking.
+  Build shows how much space the `-old-N` archives are using and, if any exist, offers to prune them first.
+- **Reclaim space:** `.\Reset-FleetVM.ps1 -PruneArchives` deletes the `-old-N` archives (keeps the current
+  disk), gated by a `PERMANENTLY DELETE` confirmation. Build wires this in when it archives.
+- `-RemoveDisk` on Reset deletes the current disk too (double-gated: type the VM name, then `PERMANENTLY
+  DELETE`). `-DeleteExistingVhdx` on Build deletes instead of archiving. `-RemoveKey` wipes the SSH key dir
+  (kept by default). `-Force` skips prompts for automation.
+
+## Fast iteration (skip the full rebuild)
+
+Once a VM exists, don't rebuild from scratch to test a code change — use `Push-FleetState.ps1`:
+
+```powershell
+.\Push-FleetState.ps1 -Build     # sync local source -> build on the VM (warm caches, ~2-4 min) -> restart
+.\Push-FleetState.ps1 -PullFrom  # grab the built binary as an artifact (build once, deploy many)
+.\Push-FleetState.ps1            # deploy that artifact to another VM + restart
+```
+
+Fleet's binary needs cgo, so it can't be cross-compiled on Windows — the VM is the Linux builder. The binary
+embeds the frontend, so it's the only file that changes on a redeploy.
+
 ## How it's a true appliance
 
 - **No interactive steps** — the kickstart (`rocky-fleet.ks.template`) drives disk, user, SSH key, packages;

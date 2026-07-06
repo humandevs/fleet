@@ -28,7 +28,9 @@ param(
   [string]$Artifact  = "$PSScriptRoot\artifacts\fleet",   # local path to the built linux binary
   [string]$RemoteBin = "/usr/local/bin/fleet",             # where the runtime VM runs it from
   [string]$RemoteBuilt = "/opt/fleet-src/build/fleet",     # where the builder VM leaves a fresh build
-  [switch]$PullFrom                                          # pull the built binary FROM the VM instead of deploying
+  [switch]$PullFrom,                                         # pull the built binary FROM the VM instead of deploying
+  [switch]$Build,                                            # sync local source to the VM, build it there, restart
+  [string]$RepoSource = ""                                  # -Build source; default = repo root (human\appliance\..\..)
 )
 $ErrorActionPreference = "Stop"
 
@@ -52,6 +54,55 @@ if (-not $IP) { throw "Could not find the IP for $VMName. Pass -IP, or read it o
 if (-not (Test-Path $KeyPath)) { throw "SSH key not found: $KeyPath (pass -KeyPath)" }
 $sshTarget = "$User@$IP"
 $sshOpts   = @("-i", $KeyPath, "-o", "StrictHostKeyChecking=accept-new")
+
+if ($Build) {
+  # Sync local source to the builder VM, build it there (warm caches -> incremental), install + restart.
+  if (-not $RepoSource) { $RepoSource = (Resolve-Path (Join-Path $PSScriptRoot "..\..")).Path }
+  if (-not (Test-Path (Join-Path $RepoSource "go.mod"))) { throw "RepoSource '$RepoSource' is not the Fleet repo (no go.mod). Pass -RepoSource." }
+
+  Write-Host "==> Packaging source from $RepoSource ..." -ForegroundColor Cyan
+  # Fresh unique stage dir each run so a stale/AV-locked prior tarball can't block tar's output (see notes
+  # in Build-FleetAppliance.ps1). Sweep old ones best-effort.
+  Get-ChildItem $env:TEMP -Directory -Filter "fleet-build-push-*" -ErrorAction SilentlyContinue |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  $stage = Join-Path $env:TEMP ("fleet-build-push-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))
+  New-Item -ItemType Directory -Force -Path $stage | Out-Null
+  $tgz = Join-Path $stage "fleet-src.tar.gz"
+  $exFile = Join-Path $stage "excludes.txt"
+  @('.git','.git/*','*/.git','*/.git/*','*node_modules*','build','build/*','.cache','.cache/*','*/.cache','*/.cache/*','*.vhdx') |
+    Set-Content -Encoding Ascii $exFile
+  $tarExe = Join-Path $env:SystemRoot "System32\tar.exe"
+  & $tarExe -czf $tgz -C $RepoSource --exclude-from=$exFile .
+  if ($LASTEXITCODE -ne 0) { throw "tar failed packaging the source." }
+  Write-Host ("    {0} MB source -> $($sshTarget):/tmp/fleet-src.tar.gz" -f [math]::Round((Get-Item $tgz).Length/1MB))
+  & scp @sshOpts $tgz "$($sshTarget):/tmp/fleet-src.tar.gz"
+  if ($LASTEXITCODE -ne 0) { throw "scp of source failed." }
+
+  # Extract over /opt/fleet-src (keeps node_modules/build/Go caches for an incremental build), build, install,
+  # restart, smoke. NOTE: tar-extract does not delete files removed locally; for a clean tree, re-provision.
+  $remoteBuild = @'
+set -e
+sudo mkdir -p /opt/fleet-src
+sudo chown -R "$(whoami)" /opt/fleet-src
+tar -xzf /tmp/fleet-src.tar.gz -C /opt/fleet-src && rm -f /tmp/fleet-src.tar.gz
+cd /opt/fleet-src
+export PATH=$PATH:/usr/local/go/bin
+echo "== make deps ==";     make deps
+echo "== make generate =="; make generate
+echo "== make build ==";    make build
+sudo install -m 0755 build/fleet __BIN__
+sudo systemctl restart fleet
+echo "waiting for /healthz..."
+for i in $(seq 1 24); do curl -fsk https://127.0.0.1:8080/healthz >/dev/null 2>&1 && { echo HEALTHY; exit 0; }; sleep 5; done
+echo "NOT-HEALTHY - check: sudo journalctl -u fleet -n 50"; exit 1
+'@ -replace '__BIN__', $RemoteBin
+
+  Write-Host "==> Building on $sshTarget (make generate + build; warm caches ~2-4 min)..." -ForegroundColor Cyan
+  & ssh @sshOpts $sshTarget $remoteBuild
+  if ($LASTEXITCODE -eq 0) { Write-Host "Built + deployed. Fleet healthy: https://$($IP):8080" -ForegroundColor Green }
+  else { Write-Host "Build/deploy did not report healthy. Check journalctl on the VM." -ForegroundColor Yellow }
+  return
+}
 
 if ($PullFrom) {
   # Capture the freshly-built binary from the builder VM as the local artifact.

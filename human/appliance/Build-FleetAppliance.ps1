@@ -34,6 +34,8 @@ param(
   [string]$VMPath        = "C:\HyperV",           # where generated ISOs live (and the VHDX, unless -VhdxPath)
   [string]$VhdxPath      = "",                     # VM disk location: a full *.vhdx path OR a directory.
                                                    # Empty => <VMPath>\<VMName>.vhdx. Point at another drive here.
+  [switch]$DeleteExistingVhdx,                     # opt-in: PERMANENTLY delete an existing disk at that path
+                                                   # (irreversible). Default keeps it + builds a new disk.
   [string]$RockyIso      = "C:\isos\Rocky-9-latest-x86_64-minimal.iso",
   [string]$SwitchName    = "Default Switch",
   [string]$SshPublicKeyPath,                    # optional: bring your own public key
@@ -117,6 +119,26 @@ function Get-NextKeyName {
   return "$($Base)_$i"
 }
 
+# Next un-used archive name (fleet-prod.vhdx -> fleet-prod-old-1.vhdx), so an existing disk is moved aside
+# (never overwritten) and the new build always uses the canonical name -- no version tracking needed.
+function Get-NextOldVhdxPath {
+  param([string]$Path)
+  $dir  = Split-Path -Parent $Path
+  $base = [IO.Path]::GetFileNameWithoutExtension($Path)
+  $ext  = [IO.Path]::GetExtension($Path)
+  $i = 1
+  while (Test-Path (Join-Path $dir "$base-old-$i$ext")) { $i++ }
+  return (Join-Path $dir "$base-old-$i$ext")
+}
+
+function Remove-FileHard {
+  param([string]$Path)
+  for ($i = 0; $i -lt 6 -and (Test-Path $Path); $i++) {
+    try { Remove-Item $Path -Force -ErrorAction Stop } catch { Start-Sleep -Milliseconds 500 }
+  }
+  return (-not (Test-Path $Path))
+}
+
 # --- 0. Resolve SSH access mode: key (given), key (generated), or password-only (no key in the image) ---
 if ($GenerateSshKey) {
   $keyDir = Join-Path $VMPath "$VMName-ssh"
@@ -176,8 +198,12 @@ if (-not $RepoUrl) {
     throw "RepoSource '$RepoSource' doesn't look like the Fleet repo (no go.mod). Pass -RepoSource <path> or -RepoUrl <url>."
   }
   Write-Host "==> Source: LOCAL working tree at $RepoSource (packaged onto a FLEETSRC ISO - no repo network access needed)."
-  $srcStage = Join-Path $env:TEMP "fleet-src-stage"
-  Remove-Item $srcStage -Recurse -Force -ErrorAction SilentlyContinue
+  # Fresh unique stage dir each run: a stale prior fleet-src.tar.gz can be briefly locked by antivirus after a
+  # big write, which makes Remove-Item (silent) leave it and tar then "fails to open" the output. A new GUID
+  # path can never be locked. Best-effort sweep of old stage dirs.
+  Get-ChildItem $env:TEMP -Directory -Filter "fleet-src-*" -ErrorAction SilentlyContinue |
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+  $srcStage = Join-Path $env:TEMP ("fleet-src-" + [Guid]::NewGuid().ToString("N").Substring(0, 8))
   New-Item -ItemType Directory -Force -Path $srcStage | Out-Null
   $tgz = Join-Path $srcStage "fleet-src.tar.gz"
   Write-Host "    Archiving working tree (excluding .git / node_modules / build; captures uncommitted work)..."
@@ -229,7 +255,7 @@ if ($srcStage) {
 # --- 3. Create + configure the VM ---
 Write-Host "==> Creating VM $VMName..."
 if (Get-VM -Name $VMName -ErrorAction SilentlyContinue) {
-  throw "VM '$VMName' already exists. Remove it first: Stop-VM $VMName -Force; Remove-VM $VMName -Force"
+  throw "VM '$VMName' already exists. Tear it down first:  .\Reset-FleetVM.ps1 -VMName $VMName"
 }
 # Resolve the VHDX path: full *.vhdx -> use as-is; a directory -> <dir>\<VMName>.vhdx; empty -> under VMPath.
 if (-not $VhdxPath) {
@@ -241,7 +267,47 @@ if (-not $VhdxPath) {
 }
 $vhdDir = Split-Path -Parent $vhd
 New-Item -ItemType Directory -Force -Path $vhdDir | Out-Null
-if (Test-Path $vhd) { throw "VHDX already exists: $vhd (remove it or choose another -VhdxPath)." }
+
+# An existing VHDX is precious (it may hold a built Fleet + data) and deleting it is IRREVERSIBLE. So never
+# overwrite by default: rename the existing disk aside to <name>-old-N.vhdx (kept, not deleted) and build a
+# fresh disk at the canonical name. Deleting the existing disk instead requires an explicit opt-in
+# (-DeleteExistingVhdx) or typing the exact phrase when prompted.
+if (Test-Path $vhd) {
+  $deleteExisting = [bool]$DeleteExistingVhdx
+  $base  = [IO.Path]::GetFileNameWithoutExtension($vhd)
+  $olds  = @(Get-ChildItem -LiteralPath $vhdDir -Filter "$base-old-*.vhdx" -ErrorAction SilentlyContinue)
+  $oldGb = if ($olds.Count) { [math]::Round(($olds | Measure-Object Length -Sum).Sum / 1GB, 1) } else { 0 }
+
+  if (-not $deleteExisting -and [Environment]::UserInteractive) {
+    Write-Host ""
+    Write-Host "A VHDX already exists: $vhd" -ForegroundColor Yellow
+    Write-Host "By default it is RENAMED ASIDE to <name>-old-N.vhdx (kept) and a fresh disk is built." -ForegroundColor Yellow
+    if ($olds.Count) {
+      Write-Host ("Heads up: {0} archived disk(s) already use ~{1} GB in {2}, and archives are NEVER auto-deleted." -f $olds.Count, $oldGb, $vhdDir) -ForegroundColor Yellow
+    }
+    $ans = Read-Host "Press Enter to archive this disk and continue, or type PERMANENTLY DELETE to delete it instead (irreversible)"
+    if ($ans -ceq 'PERMANENTLY DELETE') { $deleteExisting = $true }
+  }
+  if ($deleteExisting) {
+    Write-Host "PERMANENTLY deleting existing VHDX: $vhd" -ForegroundColor Red
+    if (-not (Remove-FileHard $vhd)) { throw "Could not delete $vhd (locked/in use? stop/remove the VM first)." }
+  } else {
+    # Offer to prune the pre-existing archives first (wires in Reset-FleetVM.ps1's cleanup), then archive.
+    $reset = Join-Path $PSScriptRoot 'Reset-FleetVM.ps1'
+    if ($olds.Count -and [Environment]::UserInteractive -and (Test-Path $reset)) {
+      $p = Read-Host ("Prune the {0} existing archived disk(s) (~{1} GB) first to reclaim space? [y/N]" -f $olds.Count, $oldGb)
+      if ($p -match '^\s*[yY]') { & $reset -VMName $VMName -VMPath $VMPath -VhdxPath $VhdxPath -PruneArchives -Force }
+    }
+    # Rename (not delete) the existing disk out of the way; the new build keeps the canonical name.
+    $archived = Get-NextOldVhdxPath $vhd
+    Rename-Item -LiteralPath $vhd -NewName (Split-Path -Leaf $archived)
+    $olds  = @(Get-ChildItem -LiteralPath $vhdDir -Filter "$base-old-*.vhdx" -ErrorAction SilentlyContinue)
+    $oldGb = [math]::Round(($olds | Measure-Object Length -Sum).Sum / 1GB, 1)
+    Write-Host "Existing disk archived (not deleted): $archived" -ForegroundColor Cyan
+    Write-Host ("NOTE: {0} archived disk(s) now using ~{1} GB in {2} - prune anytime with '.\Reset-FleetVM.ps1 -PruneArchives'." -f $olds.Count, $oldGb, $vhdDir) -ForegroundColor Yellow
+    Write-Host "Building fresh disk at: $vhd" -ForegroundColor Cyan
+  }
+}
 if ($MemoryMin -gt $MemoryStartup -or $MemoryStartup -gt $MemoryMax) {
   throw "Memory must satisfy MemoryMin <= MemoryStartup <= MemoryMax (min=$MemoryMin startup=$MemoryStartup max=$MemoryMax)."
 }
