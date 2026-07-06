@@ -64,6 +64,7 @@ function New-DataIso {
     Add-Type -TypeDefinition @"
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
 public static class IsoFileWriter {
   public static void Write(object stream, string path) {
@@ -125,11 +126,15 @@ if (-not $RepoUrl) {
   New-Item -ItemType Directory -Force -Path $srcStage | Out-Null
   $tgz = Join-Path $srcStage "fleet-src.tar.gz"
   Write-Host "    Archiving working tree (excluding .git / node_modules / build; captures uncommitted work)..."
-  # bsdtar ships as tar.exe on Windows 10/11. Broad '*' patterns match across path separators in bsdtar.
-  & tar.exe -czf $tgz -C $RepoSource `
-      --exclude='*node_modules*' --exclude='*/.git' --exclude='*/.git/*' `
-      --exclude='./build' --exclude='./build/*' --exclude='*/.cache/*' --exclude='*.vhdx' .
-  if ($LASTEXITCODE -ne 0) { throw "tar failed packaging the repo. Ensure tar.exe is available (Windows 10/11 includes it)." }
+  # Windows bsdtar strips the leading './' before matching --exclude, so a top-level dir needs a BARE pattern
+  # (.git), while nested ones need '*/' (*/.git for submodules). An --exclude-from file also dodges
+  # PowerShell's native-argument quoting. (Confirmed against bsdtar 3.8.4.)
+  $exFile = Join-Path $srcStage "excludes.txt"
+  @('.git','.git/*','*/.git','*/.git/*','*node_modules*','build','build/*',
+    '.cache','.cache/*','*/.cache','*/.cache/*','*.vhdx') | Set-Content -Encoding Ascii $exFile
+  $tarExe = Join-Path $env:SystemRoot "System32\tar.exe"   # absolute path -> guaranteed Windows bsdtar, not a PATH tar
+  & $tarExe -czf $tgz -C $RepoSource --exclude-from=$exFile .
+  if ($LASTEXITCODE -ne 0) { throw "tar failed packaging the repo. Ensure $tarExe exists (Windows 10/11 includes it)." }
   Write-Host ("    Archive: {0} MB (build version metadata will be blank - no .git; fine for dev)." -f [math]::Round((Get-Item $tgz).Length/1MB))
 } else {
   Write-Host "==> Source: REMOTE git ($RepoUrl @ $Branch)."
