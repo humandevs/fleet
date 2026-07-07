@@ -6,6 +6,14 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Fleet is an open-source platform for IT and security teams: device management (MDM), vulnerability reporting, osquery fleet management, and security monitoring. Go backend, React/TypeScript frontend, manages thousands of devices across macOS, Windows, Linux, iOS, iPadOS, Android, and ChromeOS.
 
+## Human-ISM UEM fork
+
+This repo is a fork building a sellable UEM/RMM on Fleet's **MIT-licensed core**. Fork-specific work lives under `human/` — including community plugins (`server/community/`), the appliance/deployment tooling (`human/appliance/`), and strategy docs.
+
+- **`human/stack-decisions.md`** — the living record of platform decisions. **Current direction: Fleet is a STOCK, headless, API-driven device engine — NOT forked.** Custom UEM/RMM value (tenancy, integrations, coverage matrix, UI) lives in a *separate* platform (Payload + NestJS + Hono, Postgres/Drizzle, single IdP = Payload). The official-image `human/appliance/fleet-stack/` compose is the production pattern; the fork-image/appliance-build path is retired. `human/stack-options-rmm.html` is the full options matrix.
+- **`human/ARCHITECTURE.md`** — code-grounded comparison of Fleet vs **TacticalRMM** (sibling repo at `../tacticalrmm`). **TacticalRMM is a *design reference only* — its license forbids forking/rebranding/reselling, and its imperative NATS agent can't be swapped for osquery/orbit.**
+- Do **not** copy code from `../tacticalrmm` into this repo (source-available/anti-resale license). Before adding custom Go/React to *this* Fleet fork, check `stack-decisions.md` — most new RMM logic now belongs in the separate platform, not in Fleet.
+
 ## Architecture
 
 ### Backend request flow

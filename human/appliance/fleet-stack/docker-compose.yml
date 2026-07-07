@@ -1,0 +1,71 @@
+# Standalone Fleet stack: official (pre-built) Fleet image + MySQL + Redis. No compiling -- working UI in
+# minutes. Swap FLEET_IMAGE for your fork image later (see ../CUSTOM-BUILD-PROGRESS.md):
+#   FLEET_IMAGE=yourorg/fleet:ceplus docker compose up -d
+#
+# Secrets come from .env (generated with strong random values -- see README). The ${VAR:?...} form makes
+# compose FAIL LOUDLY if a secret is missing, so nothing weak is ever used by default.
+
+x-fleet-db: &fleet-db
+  FLEET_MYSQL_ADDRESS: mysql:3306
+  FLEET_MYSQL_DATABASE: fleet
+  FLEET_MYSQL_USERNAME: fleet
+  FLEET_MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env (see README)}
+
+services:
+  mysql:
+    image: mysql:8.0.44
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: fleet
+      MYSQL_USER: fleet
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?set MYSQL_PASSWORD in .env}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      # References the container's env at runtime ($$ -> $), so the password isn't in the compose file
+      # or visible in `docker inspect`.
+      test: ["CMD-SHELL", 'mysqladmin ping -h 127.0.0.1 -uroot -p"$$MYSQL_ROOT_PASSWORD" --silent']
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # One-shot: run DB migrations, then exit. fleet waits for it to finish successfully.
+  fleet-migrate:
+    image: ${FLEET_IMAGE:-fleetdm/fleet:latest}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      <<: *fleet-db
+    command: ["fleet", "prepare", "db", "--no-prompt"]
+    restart: "no"
+
+  fleet:
+    image: ${FLEET_IMAGE:-fleetdm/fleet:latest}
+    depends_on:
+      fleet-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *fleet-db
+      FLEET_REDIS_ADDRESS: redis:6379
+      FLEET_SERVER_ADDRESS: 0.0.0.0:8080
+      FLEET_SERVER_TLS: "false"     # plain HTTP for local/demo; front with a TLS proxy for real use
+      FLEET_LOGGING_JSON: "true"
+      FLEET_SERVER_PRIVATE_KEY: ${FLEET_SERVER_PRIVATE_KEY:?set FLEET_SERVER_PRIVATE_KEY in .env (32 chars)}
+    command: ["fleet", "serve"]
+    ports:
+      - "8080:8080"
+    restart: on-failure
+
+volumes:
+  mysql-data:

@@ -1,0 +1,1306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UniverseML / Digiguide Stack Options</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:        #0f0f11;
+    --bg2:       #16161a;
+    --bg3:       #1e1e24;
+    --border:    rgba(255,255,255,0.07);
+    --border2:   rgba(255,255,255,0.12);
+    --text:      #e2e0d8;
+    --text2:     #999790;
+    --text3:     #52504c;
+    --green:     #4ade80;
+    --green-bg:  rgba(74,222,128,0.08);
+    --red:       #f87171;
+    --red-bg:    rgba(248,113,113,0.08);
+    --blue:      #60a5fa;
+    --blue-bg:   rgba(96,165,250,0.08);
+    --amber:     #fbbf24;
+    --amber-bg:  rgba(251,191,36,0.08);
+    --purple:    #a78bfa;
+    --purple-bg: rgba(167,139,250,0.08);
+    --mono:      'JetBrains Mono', 'Fira Code', 'Courier New', monospace;
+    --sans:      system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --radius:    8px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 13.5px;
+    line-height: 1.6;
+    padding: 2.5rem 2rem;
+    max-width: 1020px;
+    margin: 0 auto;
+  }
+
+  /* HEADER */
+  .doc-header { margin-bottom: 2.5rem; padding-bottom: 1.5rem; border-bottom: 0.5px solid var(--border2); }
+  .doc-title { font-size: 21px; font-weight: 600; letter-spacing: -0.3px; margin-bottom: 4px; }
+  .doc-sub { color: var(--text2); font-size: 13px; }
+  .doc-meta { margin-top: 12px; display: flex; gap: 16px; flex-wrap: wrap; }
+  .doc-tag {
+    font-family: var(--mono); font-size: 11px; padding: 2px 8px;
+    border-radius: 4px; border: 0.5px solid var(--border2);
+    color: var(--text2); background: var(--bg2);
+  }
+
+  /* SECTION */
+  .section { margin-bottom: 2.5rem; }
+  .section-label {
+    font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text3); font-family: var(--mono); margin-bottom: 6px;
+  }
+  .section-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+
+  /* CARDS GRID */
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+  .cards.two { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
+
+  .card {
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 16px;
+    position: relative;
+  }
+  .card.pick { border-color: var(--green); background: linear-gradient(135deg, var(--bg2), rgba(74,222,128,0.04)); }
+  .card.pick::before {
+    content: "RECOMMENDED";
+    position: absolute; top: 10px; right: 10px;
+    font-size: 9px; font-weight: 700; letter-spacing: 0.08em;
+    font-family: var(--mono); color: var(--green);
+    background: var(--green-bg); padding: 2px 6px; border-radius: 3px;
+  }
+  .card.avoid { border-color: rgba(248,113,113,0.2); }
+
+  .card-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
+  .card-type {
+    font-size: 11px; font-family: var(--mono); color: var(--text3);
+    margin-bottom: 8px;
+  }
+  .card-desc { font-size: 12.5px; color: var(--text2); margin-bottom: 10px; line-height: 1.55; }
+
+  .pros-cons { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .pros, .cons { border-radius: 5px; padding: 8px 10px; }
+  .pros { background: var(--green-bg); }
+  .cons { background: var(--red-bg); }
+  .pros-label { font-size: 10px; font-weight: 700; font-family: var(--mono); color: var(--green); letter-spacing: 0.05em; margin-bottom: 5px; }
+  .cons-label { font-size: 10px; font-weight: 700; font-family: var(--mono); color: var(--red); letter-spacing: 0.05em; margin-bottom: 5px; }
+  .pros ul, .cons ul { list-style: none; padding: 0; }
+  .pros li, .cons li { font-size: 11.5px; color: var(--text); line-height: 1.5; padding: 1px 0; }
+  .pros li::before { content: "↑ "; color: var(--green); font-size: 10px; }
+  .cons li::before { content: "↓ "; color: var(--red); font-size: 10px; }
+
+  /* LICENSE BADGE */
+  .badges { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px; }
+  .badge {
+    font-size: 10px; font-family: var(--mono); padding: 1px 6px;
+    border-radius: 3px; font-weight: 500;
+  }
+  .badge-mit   { background: var(--green-bg); color: var(--green); }
+  .badge-apache{ background: var(--blue-bg); color: var(--blue); }
+  .badge-bsl   { background: var(--amber-bg); color: var(--amber); }
+  .badge-saas  { background: var(--purple-bg); color: var(--purple); }
+  .badge-gpl   { background: rgba(255,255,255,0.06); color: var(--text2); }
+  .badge-free  { background: var(--green-bg); color: var(--green); }
+  .badge-paid  { background: var(--red-bg); color: var(--red); }
+
+  /* VERDICT */
+  .verdict {
+    background: var(--bg3); border: 0.5px solid var(--border2);
+    border-radius: var(--radius); padding: 12px 14px; margin-top: 10px;
+    font-size: 12px; color: var(--text2); line-height: 1.6;
+  }
+  .verdict strong { color: var(--text); }
+
+  /* DIVIDER */
+  hr { border: none; border-top: 0.5px solid var(--border); margin: 2rem 0; }
+
+  /* NOTE */
+  .note {
+    background: var(--amber-bg); border: 0.5px solid rgba(251,191,36,0.2);
+    border-radius: var(--radius); padding: 10px 14px;
+    font-size: 12px; color: var(--text2); margin-top: 8px; line-height: 1.6;
+  }
+  .note strong { color: var(--amber); }
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <h1 class="doc-title">UniverseML / Digiguide — Stack Options</h1>
+  <p class="doc-sub">Decision matrix across every major architectural layer. Recommended choices reflect license, runtime, and integration constraints discussed in context.</p>
+  <div class="doc-meta">
+    <span class="doc-tag">17 decision areas</span>
+    <span class="doc-tag">July 2026</span>
+    <span class="doc-tag">Turborepo monorepo</span>
+    <span class="doc-tag">Expo + Next.js + Hono + Payload</span>
+  </div>
+</div>
+
+<!-- 1. BACKEND API -->
+<div class="section">
+  <p class="section-label">Layer 01 — Backend API</p>
+  <h2 class="section-title">API Gateway / HTTP Framework</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">Hono</div>
+      <div class="card-type">Edge-native, lightweight, universal</div>
+      <div class="card-desc">14 KB, runs on Cloudflare Workers, Bun, Deno, Node, AWS Lambda. Used for the UniverseML metadata API, Payload extensions, and any edge-deployable routes.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Runs everywhere — edge, serverless, Node</li>
+          <li>Drizzle + Zod integrate cleanly</li>
+          <li>Type-safe RPC mode (no codegen)</li>
+          <li>Sub-5ms cold starts on edge</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>No DI container — needs discipline at scale</li>
+          <li>No native WebSocket gateway</li>
+          <li>No built-in MQTT transport</li>
+          <li>Large teams need enforced conventions</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card pick">
+      <div class="card-name">NestJS</div>
+      <div class="card-type">Enterprise, DI-based — RMM service only</div>
+      <div class="card-desc">Node-only, Angular-inspired DI container. Right choice specifically for the RMM telemetry/command service: MQTT transport, WebSocket gateways, CQRS, BullMQ all native. Not for edge deployment.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Native MQTT, gRPC, WebSocket transports</li>
+          <li>CQRS + Event Sourcing module built-in</li>
+          <li>DI makes Drizzle repos clean to inject</li>
+          <li>Large ecosystem of tested modules</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Node-only, no edge/serverless</li>
+          <li>500–2000ms cold starts on Lambda</li>
+          <li>Heavy boilerplate per feature</li>
+          <li>Overkill for simple REST endpoints</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">FeathersJS v5 (Dove)</div>
+      <div class="card-type">Service-oriented, automatic REST + WebSocket, hooks</div>
+      <div class="card-desc">Define a service, get REST and WebSocket exposure simultaneously — no separate controller or socket event code. Before/after/around hooks are transport-agnostic. Channels let you broadcast events only to specific clients (workspace isolation). Feathers client works on React Native. Built-in MongoDB and Knex adapters in v5 core.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>One service → REST + WebSocket auto-wired</li>
+          <li>Channels: per-workspace real-time isolation</li>
+          <li>Feathers client: Expo subscriptions to service events</li>
+          <li>Transport-agnostic hooks cleaner than NestJS RxJS pipes</li>
+          <li>Less ceremony than NestJS for CRUD + real-time</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>No official Drizzle adapter — custom services required</li>
+          <li>No native MQTT transport (still need NestJS for that)</li>
+          <li>No edge/serverless deployment</li>
+          <li>Smaller community and ecosystem than NestJS</li>
+          <li>SQL still requires migrations (claim of "no migrations" only true for MongoDB)</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">Fastify</div>
+      <div class="card-type">High-performance Node alternative</div>
+      <div class="card-desc">Faster than Express, schema-based validation, plugin system. A middle ground if NestJS feels too heavy but Hono too minimal. Not edge-native.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Faster than Express in benchmarks</li>
+          <li>Built-in JSON schema validation</li>
+          <li>Familiar for Express developers</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Node-only like NestJS</li>
+          <li>No edge/serverless native story</li>
+          <li>No native WebSocket or real-time story</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> Hono for all UniverseML API, metadata engine, and Cloudflare-deployed routes. NestJS for MQTT telemetry ingestion (native transport adapter required). <strong>FeathersJS is the strongest contender for the RMM management-plane service</strong> — device CRUD, alert management, and dashboard real-time push — where automatic REST+WebSocket dual exposure and the Feathers client on Expo reduce code significantly. If Drizzle is written as custom Feathers services (losing auto-CRUD), the channel system and client library still justify it over Hono for real-time surfaces. The MQTT ingestion layer still needs NestJS regardless.</div>
+</div>
+
+<hr>
+
+<!-- 2. MANAGEMENT PLANE CMS -->
+<div class="section">
+  <p class="section-label">Layer 02 — Management Plane / CMS</p>
+  <h2 class="section-title">Content & Entity Management Framework</h2>
+  <div class="cards two">
+
+    <div class="card pick">
+      <div class="card-name">Payload CMS</div>
+      <div class="card-type">Code-first, TypeScript, MIT licensed</div>
+      <div class="card-desc">Full TypeScript, Drizzle ORM under the hood, Local API (zero-latency server-side calls), built-in Jobs Queue, hooks at every lifecycle point. Management plane for stable, code-defined schemas: user accounts, device registry, alert rules, course catalog, CRM records.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>MIT license — no BSL/AGPL contamination</li>
+          <li>Drizzle already in stack, no new ORM</li>
+          <li>beforeChange / afterChange hooks native</li>
+          <li>Jobs Queue with Postgres persistence</li>
+          <li>Beautiful admin UI out of the box</li>
+          <li>Local API for server-side zero-latency calls</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Code-first only — no runtime user-defined schema</li>
+          <li>Schema changes require redeploy</li>
+          <li>Forking to add runtime schema = rewrites core</li>
+          <li>Community support only (no paid tier)</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">Directus</div>
+      <div class="card-type">Runtime schema, visual data model, flows</div>
+      <div class="card-desc">Runtime /collections + /fields + /relations API — user-defined schema without code changes. Visual data model editor. Flows automation. Strong integration story. The closest existing tool to the UniverseML metadata engine concept.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Runtime schema via REST API — no redeploy</li>
+          <li>Flows: event hooks, cron, webhooks</li>
+          <li>Robust REST + GraphQL auto-gen</li>
+          <li>Free under $5M total org finances</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>BSL 1.1 — $5M threshold triggers paid license</li>
+          <li>No off-the-shelf block hours support</li>
+          <li>Enterprise support = custom quote only</li>
+          <li>No mobile / React Native component story</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-bsl">BSL 1.1</span><span class="badge badge-free">Free &lt;$5M</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">NocoBase</div>
+      <div class="card-type">Plugin-based no-code platform</div>
+      <div class="card-desc">Closest to the FileMaker-style ERD → UI generation vision. SchemaComponent pattern: the same Collection can render as TableBlock, FormBlock, KanbanBlock, CalendarBlock. 80+ plugins. Architecture validation — not suitable for direct adoption.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Proves the ERD→UI architecture works at scale</li>
+          <li>Plugin registry pattern to study/replicate</li>
+          <li>SchemaComponent decouples data from UI type</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>AGPL-3.0 — network copyleft for SaaS</li>
+          <li>Web-only (React/Koa), no React Native</li>
+          <li>Commercial plugins require paid license</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-gpl">AGPL-3.0</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> Payload for all stable-schema management planes (UniverseML user/workspace/billing, Digiguide content, RMM device registry). Build a custom metadata engine (Phase 1 of build plan) in Hono + Drizzle for runtime user-defined ERD — this is what Directus does natively, but under your own MIT-compatible code. Use Directus as the <em>reference implementation</em> to study, not depend on.</div>
+</div>
+
+<hr>
+
+<!-- 3. ORM / DATABASE -->
+<div class="section">
+  <p class="section-label">Layer 03 — ORM & Database</p>
+  <h2 class="section-title">Data Access Layer</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">Drizzle ORM</div>
+      <div class="card-type">TypeScript-first, SQL-like, lightweight</div>
+      <div class="card-desc">Already in the stack. SQL-like query builder with full TypeScript inference. Works with Payload, Hono, and NestJS. pgroll-compatible migrations.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Already chosen — no switching cost</li>
+          <li>Payload uses Drizzle natively</li>
+          <li>Lightweight bundle, no reflection magic</li>
+          <li>drizzle-zod generates Zod schemas from tables</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Less mature than Prisma for complex relations</li>
+          <li>TimescaleDB hypertables need raw SQL</li>
+          <li>No official NocoBase/Directus adapter</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-apache">Apache 2.0</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card pick">
+      <div class="card-name">TimescaleDB</div>
+      <div class="card-type">Postgres extension for time-series</div>
+      <div class="card-desc">Postgres extension — stays in your existing Postgres instance. Continuous aggregates, retention policies, compression. Right tier for RMM telemetry (device metrics over time). JOIN-able with device metadata in single queries.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Stays in Postgres — one database vendor</li>
+          <li>JOIN time-series + relational in one query</li>
+          <li>Continuous aggregates for dashboard charts</li>
+          <li>Compression to ~10% of raw storage</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Timescale License (free self-hosted, paid cloud)</li>
+          <li>Some features need TimescaleDB Cloud</li>
+          <li>Drizzle requires raw SQL for hypertable features</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-bsl">Timescale License</span><span class="badge badge-free">Free self-host</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">VictoriaMetrics</div>
+      <div class="card-type">Purpose-built time-series, Prometheus-compatible</div>
+      <div class="card-desc">Single binary, MIT licensed, Prometheus-compatible. Better pure metrics performance than TimescaleDB. Separates metrics from your relational data — good if you want strict isolation.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>MIT license, single Go binary</li>
+          <li>Better read performance for pure metrics</li>
+          <li>Prometheus ecosystem compatible</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Separate database to operate</li>
+          <li>No SQL JOIN with device metadata</li>
+          <li>Extra infrastructure vs TimescaleDB extension</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+  </div>
+</div>
+
+<hr>
+
+<!-- 4. MOBILE UI -->
+<div class="section">
+  <p class="section-label">Layer 04 — Mobile / Cross-Platform UI</p>
+  <h2 class="section-title">React Native Component System</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">RNR + Unistyles v3</div>
+      <div class="card-type">Copy-paste components + native stylesheet engine</div>
+      <div class="card-desc">react-native-reusables (shadcn model for RN) + Unistyles v3 (style changes on native thread, zero React re-renders, zero JS bridge). Already in Digiguide. The correct choice for canvas-heavy, data-dense views on new architecture.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>You own all component code — no black boxes</li>
+          <li>Unistyles: styles on native thread (Fabric)</li>
+          <li>Zero re-renders on style change</li>
+          <li>Already in stack — migration cost = zero</li>
+          <li>CraftReactNative/ui adds more components</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Smaller marketplace than gluestack/NativeWind</li>
+          <li>Business screen components more sparse</li>
+          <li>More build-it-yourself than competitors</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">Gluestack UI v3</div>
+      <div class="card-type">Component library + Gluestack Market screens</div>
+      <div class="card-desc">50+ copy-paste business screens (dashboards, forms, kanban, e-commerce) via Gluestack Market. Modular, unbundled. Strong business-screen depth. Different styling engine from current stack.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Richest business screen library available</li>
+          <li>50+ pre-built screens in Gluestack Market</li>
+          <li>Figma ↔ code design system integration</li>
+          <li>Fabric + TurboModules optimised</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>NativeWind styling — stack migration cost</li>
+          <li>Loses Unistyles native-thread style advantage</li>
+          <li>Market screens are paid</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-paid">Market: paid</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> Stay RNR + Unistyles. Use Gluestack Market as a <em>design reference</em> for business screen patterns — purchase for the pattern library, port to RNR components. CraftReactNative/ui CLI fills gaps in primitive coverage.</div>
+</div>
+
+<hr>
+
+<!-- 5. CLIENT SYNC -->
+<div class="section">
+  <p class="section-label">Layer 05 — Offline Sync</p>
+  <h2 class="section-title">Client-Side Data Sync Engine</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">PowerSync</div>
+      <div class="card-type">Bidirectional SQLite sync, offline-first</div>
+      <div class="card-desc">Already integrated in Digiguide. Bidirectional, works with existing Drizzle schema, offline SQLite writes sync back to Supabase. Keep for user-owned data needing full offline write capability.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Already in production in Digiguide</li>
+          <li>Bidirectional — writes offline, syncs back</li>
+          <li>@powersync/drizzle-driver native integration</li>
+          <li>Schema-aware partial sync per workspace</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Paid tiers for production scale</li>
+          <li>More complex than read-only sync needs</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-saas">SaaS</span><span class="badge badge-free">Free dev tier</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">Electric SQL + TanStack DB</div>
+      <div class="card-type">Read-path sync + reactive client store</div>
+      <div class="card-desc">Electric serves Postgres shapes (filtered live views) to clients. TanStack DB is the reactive client store (sub-millisecond live queries). Simpler model for read-heavy metadata sync. Expo and web starters available.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Shape model ideal for metadata sync</li>
+          <li>TanStack DB unifies web + mobile store</li>
+          <li>PowerSync adapter — compatible with existing</li>
+          <li>Simpler for read-heavy derived data</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Read-path only — writes still go through API</li>
+          <li>Less mature than PowerSync for production</li>
+          <li>Adds another sync abstraction to maintain</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-apache">Apache 2.0</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> PowerSync for Digiguide's existing offline-write data and UniverseML canvas state. Evaluate Electric + TanStack DB for new UniverseML metadata sync (read-heavy, shape-filtered per workspace). Both can coexist — TanStack DB has a PowerSync adapter.</div>
+</div>
+
+<hr>
+
+<!-- 6. ADMIN UI -->
+<div class="section">
+  <p class="section-label">Layer 06 — Web Admin UI</p>
+  <h2 class="section-title">Data Management / Admin Console</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">Refine + shadcn/ui</div>
+      <div class="card-type">Headless CRUD framework + web components</div>
+      <div class="card-desc">Headless meta-framework: @refinedev/supabase generates authProvider + dataProvider at init. UI-agnostic — use shadcn/ui on web, share the same data layer with Expo mobile. Hooks like useList('courses') work on both surfaces.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Headless — your UI, their data hooks</li>
+          <li>Native Supabase + Payload data providers</li>
+          <li>Same data layer for web admin + mobile</li>
+          <li>RBAC via CASL built in</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>More abstractions than react-admin</li>
+          <li>Headless means more UI work upfront</li>
+          <li>Less opinionated — discipline required</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">react-admin (Enterprise)</div>
+      <div class="card-type">Batteries-included CRUD framework (MUI)</div>
+      <div class="card-desc">Decade of CRUD edge-case handling. Enterprise Edition has DatagridAG (AG Grid), Calendar, TreeInput, real-time record locking. ra-core hooks can be used without MUI. Tightly coupled to Material UI otherwise.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Most mature CRUD component library</li>
+          <li>Optimistic updates, undo, pessimistic mode</li>
+          <li>Enterprise: DatagridAG, Calendar, realtime locks</li>
+          <li>Best design reference for internal tools</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Tightly coupled to Material UI default</li>
+          <li>Advanced features locked behind Enterprise paid</li>
+          <li>No mobile / React Native story</li>
+          <li>Not headless — diverging from UI is hard</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT core</span><span class="badge badge-paid">Enterprise: paid</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> Refine as the data/auth provider layer (shared web + mobile). Study react-admin Enterprise's component patterns. Consider licensing react-admin Enterprise for the internal-facing admin console where MUI aesthetics are acceptable — use Refine for the customer-facing product.</div>
+</div>
+
+<hr>
+
+<!-- 7. WORKFLOW AUTOMATION -->
+<div class="section">
+  <p class="section-label">Layer 07 — Workflow Automation</p>
+  <h2 class="section-title">Triggers, Workers & Business Logic</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">Payload Jobs Queue</div>
+      <div class="card-type">Postgres-backed, durable, typed</div>
+      <div class="card-desc">Postgres-backed durable job queue. afterChange hooks → jobs.queue() pattern. Retry semantics, tracked in admin UI, cron scheduling. Right for management-plane business logic: billing triggers, onboarding sequences, alert evaluation.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Already in Payload stack — no extra service</li>
+          <li>Jobs tracked in Postgres admin UI</li>
+          <li>Typed tasks with Zod input schemas</li>
+          <li>Cron scheduling native</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Not suited for high-throughput (1000s/min)</li>
+          <li>Postgres polling — higher latency than Redis queue</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card pick">
+      <div class="card-name">BullMQ (NestJS)</div>
+      <div class="card-type">Redis-backed, high-throughput, priority queues</div>
+      <div class="card-desc">Redis-backed via @nestjs/bullmq. Handles millions of jobs/day. Right for RMM telemetry processing pipeline — thousands of device check-ins per minute, alert condition evaluation, patch status ingestion.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Handles millions of jobs per day</li>
+          <li>Priority queues, rate limiting, deduplication</li>
+          <li>Concurrency control per worker pool</li>
+          <li>@nestjs/bullmq first-class integration</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Redis dependency to operate</li>
+          <li>Jobs not visible in Payload admin</li>
+          <li>RMM service only — not shared with Payload</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">n8n</div>
+      <div class="card-type">Visual workflow automation, 400+ integrations</div>
+      <div class="card-desc">Self-hostable visual workflow builder. Native Directus trigger node, Stripe, Xero, 3PL integrations. Right for complex cross-system workflows that neither Payload Jobs nor BullMQ was designed for. ERP integration layer.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>400+ pre-built integrations</li>
+          <li>Visual workflows non-developers can edit</li>
+          <li>Replaces custom webhook glue code</li>
+          <li>Self-hostable, fair-code license</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Fair-code (sustainable use) license — check terms</li>
+          <li>Another service to operate</li>
+          <li>Not suited for high-frequency jobs</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-bsl">Fair-code</span><span class="badge badge-free">Free self-host</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">Temporal</div>
+      <div class="card-type">Durable workflow engine, long-running processes</div>
+      <div class="card-desc">Durable workflows that outlive process restarts. Sleep for days, retry individual steps, exactly-once execution. Right for complex ERP approval chains, multi-day provisioning workflows. Overkill for basic queue jobs.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Workflows survive server restarts</li>
+          <li>Guaranteed exactly-once execution</li>
+          <li>Multi-day sleep, compensation patterns</li>
+          <li>Full audit trail of every workflow step</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Significant operational complexity</li>
+          <li>Overkill for simple triggers/jobs</li>
+          <li>MIT but cloud offering is paid</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> Payload Jobs for management-plane triggers (low-frequency, needs audit trail). BullMQ in NestJS for RMM telemetry pipeline (high-frequency, Redis-backed). n8n for cross-system integration workflows (Stripe, Xero, 3PL). Temporal only when genuinely long-lived durable ERP workflows emerge.</div>
+</div>
+
+<hr>
+
+<!-- 8. RMM DEVICE VISIBILITY -->
+<div class="section">
+  <p class="section-label">Layer 08 — RMM: Device Visibility & Telemetry</p>
+  <h2 class="section-title">Endpoint Agent & System Data Collection</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">FleetDM + osquery</div>
+      <div class="card-type">MIT, SQL-queryable endpoints, sub-30s reporting</div>
+      <div class="card-desc">Every endpoint becomes an SQL database. Cross-platform (Windows, macOS, Linux, iOS, Android). REST API, webhooks, MCP server, GitOps. Custom osquery extensions for WMI-specific Windows data. No device limits on free tier. Used by Fastly, Uber, Gusto at scale.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>SQL interface to any endpoint in &lt;30s</li>
+          <li>REST API + webhooks + MCP server</li>
+          <li>Custom extensions for WMI/Windows-specific data</li>
+          <li>GitOps / IaC native (YAML policies)</li>
+          <li>MIT core, no device limits, no feature gates</li>
+          <li>Claude Code can query Fleet via MCP</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>MySQL + Redis infrastructure to self-host</li>
+          <li>Premium features (support, advanced MDM) cost $7/host/mo</li>
+          <li>Not a full RMM — no remote desktop built-in</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT core</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">Custom OTel Collector + Go agent</div>
+      <div class="card-type">Build-your-own telemetry pipeline</div>
+      <div class="card-desc">OTel Collector on Windows for hostmetrics + event logs. Custom Go agent for bidirectional command channel. MQTT broker for telemetry. Maximum control, maximum build cost. Replaces FleetDM only if osquery coverage is insufficient.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Full control over data model and protocol</li>
+          <li>MQTT for efficient IoT-scale telemetry</li>
+          <li>No upstream dependency</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Months of build time vs. using FleetDM</li>
+          <li>Duplicates what Fleet already does well</li>
+          <li>Go agent signing + distribution overhead</li>
+          <li>No built-in MDM, policy enforcement, CVE scanning</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-apache">Apache 2.0</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">TacticalRMM</div>
+      <div class="card-type">Full RMM: Django + Vue + Go agent</div>
+      <div class="card-desc">Feature-rich open-source RMM but agent code signing requires $50/mo GitHub sponsorship. Two maintainers. Not a platform to build on — relevant as competitive reference only.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Integrates MeshCentral natively</li>
+          <li>Chocolatey software deployment built-in</li>
+          <li>Most feature-complete open-source RMM</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Agent code signing = $50/mo sponsorship</li>
+          <li>Two-person project — sustainability risk</li>
+          <li>Django/Vue — doesn't integrate with your stack</li>
+          <li>Licence complexities for MSP distribution</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-gpl">Mixed licenses</span><span class="badge badge-paid">Signing: paid</span></div>
+    </div>
+
+  </div>
+</div>
+
+<hr>
+
+<!-- 9. PATCH MANAGEMENT -->
+<div class="section">
+  <p class="section-label">Layer 09 — RMM: Patch Management</p>
+  <h2 class="section-title">OS & Third-Party Application Patching</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">Action1</div>
+      <div class="card-type">Cloud-native, 200 endpoints free forever</div>
+      <div class="card-desc">200 endpoints free, full features, no time limit. OS + 200+ third-party app patching. Peer-to-peer distribution (bandwidth efficient). REST API for integration. Expanded free tier from 100→200 in February 2025. Not a full RMM — complements FleetDM.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>200 endpoints free forever — no feature gates</li>
+          <li>P2P distribution reduces bandwidth</li>
+          <li>200+ third-party Windows app catalog</li>
+          <li>REST API for dashboard integration</li>
+          <li>Linux support added December 2025</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Cloud-only — no self-hosted option</li>
+          <li>Pricing above 200 endpoints: custom quote only</li>
+          <li>macOS app catalog narrower than Windows</li>
+          <li>Separate vendor relationship to manage</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-saas">SaaS</span><span class="badge badge-free">Free to 200</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">Ansible + Semaphore</div>
+      <div class="card-type">Config management + lightweight web UI</div>
+      <div class="card-desc">Ansible for configuration-as-code playbooks. Semaphore (MIT) provides web UI, RBAC, job scheduling, REST API for programmatic trigger. Right for complex multi-step configuration state — not a patch manager per se.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>IaC playbooks in version control</li>
+          <li>Semaphore REST API for programmatic dispatch</li>
+          <li>Handles complex configuration state (IIS, registry)</li>
+          <li>Complementary to Action1 — different scope</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Agentless (SSH/WinRM) — friction on Windows without WinRM</li>
+          <li>Not a patch manager — no CVE tracking</li>
+          <li>Overkill for simple script dispatch (use Fleet)</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-gpl">GPL-3.0</span><span class="badge badge-mit">Semaphore: MIT</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> Action1 for patch management (OS + third-party apps). Ansible + Semaphore for configuration management workflows (registry, IIS, service state, infrastructure provisioning). Fleet scripts for simple ad-hoc script execution on enrolled endpoints (no Ansible needed for that).</div>
+</div>
+
+<hr>
+
+<!-- 10. REMOTE ACCESS -->
+<div class="section">
+  <p class="section-label">Layer 10 — RMM: Remote Access</p>
+  <h2 class="section-title">Remote Desktop, File Transfer & Terminal</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">MeshCentral</div>
+      <div class="card-type">Apache 2.0, self-hosted, no per-seat fee</div>
+      <div class="card-desc">Full remote desktop, file transfer, terminal (bash/PowerShell/cmd), Wake-on-LAN. Apache 2.0. A 50-tech shop on ScreenConnect pays ~$25K/year. Same shop on MeshCentral on a $40/mo VPS pays $480. Single maintainer risk is real — vendor and pin rather than extend via plugins.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Apache 2.0 — no license risk</li>
+          <li>No per-seat, no per-device fee</li>
+          <li>Comparable LAN performance to ScreenConnect</li>
+          <li>Active community (Ylian + si458 maintainers)</li>
+          <li>File transfer, terminal, Wake-on-LAN all included</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Single primary maintainer — sustainability risk</li>
+          <li>Plugin system unsupported — don't build on it</li>
+          <li>Slower on high-latency WAN than ScreenConnect</li>
+          <li>No commercial support contract available</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-apache">Apache 2.0</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">ScreenConnect (ConnectWise Control)</div>
+      <div class="card-type">Commercial, best-in-class WAN performance</div>
+      <div class="card-desc">Superior WAN compression, 100+ extensions, commercial support. Pricing up 15-20%/year. ~$25K/year for 50 techs. Best option for client-facing premium remote access SLA. Bolt in per-client as a premium tier on top of MeshCentral default.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Best WAN performance — proprietary compression</li>
+          <li>100+ integrations/extensions</li>
+          <li>Commercial support available</li>
+          <li>Premium upsell option for specific clients</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>~$25K/year for a 50-tech shop</li>
+          <li>15–20% annual price increases</li>
+          <li>Vendor lock-in</li>
+          <li>ConnectWise acquisition history unpredictable</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-paid">Proprietary</span><span class="badge badge-paid">~$25K/yr</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> MeshCentral as the default remote access layer. Build the dashboard integration via deep-link (device UUID → MeshCentral session) with a clean abstraction so ScreenConnect can be bolted in per-client as a premium tier. Don't extend MeshCentral via plugins — treat it as a vendored dependency.</div>
+</div>
+
+<hr>
+
+<!-- 11. SCHEMA / ERD ENGINE -->
+<div class="section">
+  <p class="section-label">Layer 11 — ERD & Runtime Schema</p>
+  <h2 class="section-title">User-Defined Data Model Engine</h2>
+  <div class="cards two">
+
+    <div class="card pick">
+      <div class="card-name">Custom Metadata Engine</div>
+      <div class="card-type">Hono + Drizzle + pgroll + polymorphic links</div>
+      <div class="card-desc">DataSource / meta_objects / meta_fields / meta_relations / entity_links tables. /api/metadata CRUD → pgroll zero-downtime DDL → dynamic GraphQL via PostGraphile. The Twenty CRM architecture, built on your own MIT-licensed stack. Full control, no BSL exposure, PowerSync-compatible metadata sync to mobile.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>MIT-licensed — no contamination risk</li>
+          <li>entity_links table: Notion-style polymorphic relations</li>
+          <li>pgroll: zero-downtime schema deploys</li>
+          <li>PowerSync sync of metadata to mobile offline</li>
+          <li>Full control over field type affinity, IR generation</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>3–4 weeks build time (Phase 1 of plan)</li>
+          <li>You own the maintenance</li>
+          <li>No visual ERD editor until Phase 4</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Build cost only</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">Directus as metadata layer</div>
+      <div class="card-type">Use /collections API as runtime schema engine</div>
+      <div class="card-desc">Directus already implements the /collections + /fields + /relations runtime schema API. Use it as your metadata engine now, build your ERD canvas as a Directus module extension, migrate to custom engine if you hit BSL ceiling.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Production-tested runtime schema today</li>
+          <li>REST + GraphQL auto-generation included</li>
+          <li>Flows automation on schema events</li>
+          <li>Prototype ERD canvas against live API immediately</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>BSL 1.1 — license risk above $5M</li>
+          <li>No PowerSync metadata sync to mobile</li>
+          <li>Field type affinity, IR generation not extensible</li>
+          <li>Migration path away from Directus = significant work</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-bsl">BSL 1.1</span><span class="badge badge-free">Free &lt;$5M</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> Build the custom metadata engine. The BSL risk compounds as UniverseML scales. The build is 3–4 weeks (Phase 1) and gives you the exact architecture needed. Use Directus as the reference implementation to validate design decisions, not as a dependency. Use Twenty CRM's open-source code as the detailed implementation reference.</div>
+</div>
+
+<hr>
+
+<!-- 12. MIGRATION STRATEGY -->
+<div class="section">
+  <p class="section-label">Layer 12 — Schema Migrations</p>
+  <h2 class="section-title">Database Migration Strategy</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">Drizzle migrations + pgroll</div>
+      <div class="card-type">Code-defined migrations + zero-downtime DDL</div>
+      <div class="card-desc">Drizzle generates SQL migration files from TypeScript schema changes (platform schema). pgroll handles runtime user-schema DDL changes (workspace object/field additions) with zero-downtime expand/contract pattern and instant rollback.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Drizzle: typed, version-controlled platform schema</li>
+          <li>pgroll: zero-lock DDL for runtime field additions</li>
+          <li>Both serve old+new schema simultaneously during migration</li>
+          <li>Instant rollback at any point</li>
+          <li>Twenty CRM uses pgroll — proven pattern</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>pgroll is a Go binary to operate</li>
+          <li>Drizzle + pgroll are separate mental models</li>
+          <li>Multi-tenant migrations need per-workspace execution</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-apache">Apache 2.0</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+  </div>
+</div>
+
+<hr>
+
+<!-- 13. MQTT BROKER -->
+<div class="section">
+  <p class="section-label">Layer 13 — Message Transport</p>
+  <h2 class="section-title">MQTT Broker / Event Bus</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">Mosquitto</div>
+      <div class="card-type">EPL-2.0, lightweight, the standard MQTT broker</div>
+      <div class="card-desc">Written in C, minimal footprint (~150 KB binary), handles hundreds of thousands of concurrent connections on modest hardware. The default choice for MQTT infrastructure. Runs as a Docker container or system service. Supports MQTT 5.0, TLS, WebSockets, persistent sessions, and QoS 0/1/2. The de-facto standard for agent-to-broker telemetry at RMM scale.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Industry standard — every MQTT client tested against it</li>
+          <li>Minimal resource footprint, single binary</li>
+          <li>MQTT 5.0, QoS 0/1/2, persistent sessions</li>
+          <li>TLS + WebSocket transport built in</li>
+          <li>Simple config file — no UI needed</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>EPL-2.0 (Eclipse license) — check distribution terms</li>
+          <li>No built-in clustering (needs bridge config)</li>
+          <li>No built-in auth UI — manage via config or plugin</li>
+          <li>Single-node by default — Redis needed for HA</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-apache">EPL-2.0</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">EMQX</div>
+      <div class="card-type">Apache 2.0, clustered, 100M+ connections</div>
+      <div class="card-desc">Erlang-based, horizontally scalable MQTT broker with built-in dashboard, rule engine, and webhook integration. Handles 100M+ concurrent connections in cluster. The right choice if you're building a multi-tenant SaaS platform offering RMM as a service at scale. Community edition is Apache 2.0; Enterprise adds paid features.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Apache 2.0 community edition</li>
+          <li>Built-in rule engine — route/transform messages without code</li>
+          <li>Web dashboard for connection management</li>
+          <li>Native clustering — no external Redis needed</li>
+          <li>Built-in Prometheus metrics export</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Heavier than Mosquitto — overkill for &lt;10K devices</li>
+          <li>Erlang runtime — unfamiliar ops for most teams</li>
+          <li>Enterprise features (persistence, audit) are paid</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-apache">Apache 2.0</span><span class="badge badge-free">Community free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">NATS</div>
+      <div class="card-type">Apache 2.0, pub/sub + queue groups + streaming</div>
+      <div class="card-desc">Not MQTT-native but covers the same use case with a simpler protocol. Single Go binary, sub-millisecond latency, built-in clustering and JetStream (persistent streaming). NestJS has a native NATS transport adapter. If you're already running NestJS microservices, NATS as the message bus is cleaner than bridging MQTT → NATS internally.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Single Go binary, &lt;20 MB, zero dependencies</li>
+          <li>JetStream: persistent, replayable message streams</li>
+          <li>NestJS native transport adapter</li>
+          <li>Built-in clustering and leaf nodes</li>
+          <li>Sub-millisecond latency</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Not MQTT — agents must use NATS client, not MQTT</li>
+          <li>Custom protocol means no off-the-shelf MQTT agents</li>
+          <li>OTel Collector can't export to NATS natively</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-apache">Apache 2.0</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> Mosquitto for the RMM MQTT broker. It's the standard, minimal, and every agent (OTel Collector, custom Go agent, third-party) speaks MQTT. Run in Docker with TLS. Scale to EMQX only when you need multi-tenant broker isolation or horizontal clustering above ~50K concurrent connections. NATS is the right internal microservice bus if you add more NestJS services communicating with each other — use MQTT externally (agents → broker) and NATS internally (broker → NestJS services).</div>
+</div>
+
+<hr>
+
+<!-- 14. TELEMETRY PIPELINE -->
+<div class="section">
+  <p class="section-label">Layer 14 — RMM: Telemetry Pipeline</p>
+  <h2 class="section-title">Continuous Metrics Collection (CPU, Memory, Disk, Network)</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">OTel Collector (hostmetrics)</div>
+      <div class="card-type">Apache 2.0, vendor-agnostic, Windows MSI installer</div>
+      <div class="card-desc">Runs as a Windows service (MSI), Linux daemon, or macOS launchd. Hostmetrics receiver collects CPU, memory, disk I/O, network I/O, and process stats at configurable intervals. windowseventlog receiver collects Event Viewer channels. windowsperfcounters receiver queries arbitrary WMI/Performance Counter data. Exports via OTLP to your NestJS ingestion service, which writes to TimescaleDB.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Apache 2.0 — completely open</li>
+          <li>Windows MSI installer, Linux native packages</li>
+          <li>windowsperfcounters: arbitrary WMI data via YAML config</li>
+          <li>windowseventlog: Event Viewer ingestion built in</li>
+          <li>YAML config — no code to deploy per customer</li>
+          <li>Vendor-agnostic — backend swap without agent change</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Continuous metrics only — no ad-hoc SQL queries (use Fleet for that)</li>
+          <li>Config distribution needs Ansible or Fleet scripts</li>
+          <li>No built-in agent management UI (Fleet manages Fleet agents, not OTel)</li>
+          <li>Separate agent from FleetDM — two things to install per endpoint</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-apache">Apache 2.0</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">Netdata Agent</div>
+      <div class="card-type">GPLv3+, per-second metrics, ML anomaly detection</div>
+      <div class="card-desc">Per-second metrics with zero configuration auto-discovery. 800+ integrations. ML trains 18 unsupervised models per metric at the edge. Windows support (Server 2016+, Windows 10+). Parent-child streaming topology. Cloud dashboard is paid above 5 nodes; self-hosted parent nodes are free. Replaces OTel Collector for metrics if you want a richer built-in UI and anomaly detection without building it.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Per-second granularity, zero-config auto-discovery</li>
+          <li>Built-in ML anomaly detection on every metric</li>
+          <li>Windows + Linux + macOS native agents</li>
+          <li>Parent node aggregation for fleet-wide view</li>
+          <li>No need to build dashboard charts from scratch</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>GPLv3+ — check distribution implications</li>
+          <li>Cloud SaaS required above 5 nodes for central management</li>
+          <li>Less flexible pipeline than OTel Collector</li>
+          <li>Third agent alongside FleetDM + possibly OTel</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-gpl">GPLv3+</span><span class="badge badge-free">Agent free</span><span class="badge badge-paid">Cloud: paid &gt;5 nodes</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">Custom Go Agent + MQTT</div>
+      <div class="card-type">Build-your-own, full control</div>
+      <div class="card-desc">A small Go binary using gopsutil for system stats + golang WMI bindings for Windows-specific data, publishing to Mosquitto via MQTT. Full control over data model, heartbeat logic, and command channel. NestJS subscribes via @nestjs/microservices MQTT transport. Higher build cost but no third-party agent dependency.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Full control over telemetry schema and cadence</li>
+          <li>Single binary handles both telemetry push and command receive</li>
+          <li>No third-party agent on customer endpoints</li>
+          <li>gopsutil: cross-platform, well-maintained</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Weeks of build time vs. using OTel Collector</li>
+          <li>Code signing, auto-update, distribution overhead</li>
+          <li>Duplicates what OTel Collector already does</li>
+          <li>No built-in anomaly detection or auto-discovery</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT (gopsutil)</span><span class="badge badge-free">Build cost only</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> OTel Collector for continuous metrics (CPU/mem/disk/network/WMI via windowsperfcounters/Event Log). FleetDM + osquery for inventory, software, processes, policies, and ad-hoc queries — these two serve different data shapes and do not overlap. Distribute the OTel Collector config per endpoint via Ansible (Linux) and Action1/Fleet scripts (Windows). The custom Go agent is only justified if you need a bidirectional command channel to endpoints that FleetDM's script execution doesn't cover — start without it, add only if that gap is real.</div>
+</div>
+
+<hr>
+
+<!-- 15. OSQUERY / FLEET DETAIL -->
+<div class="section">
+  <p class="section-label">Layer 15 — RMM: Device Queries & Inventory</p>
+  <h2 class="section-title">osquery Integration — What It Covers vs What It Doesn't</h2>
+  <div class="cards two">
+
+    <div class="card pick">
+      <div class="card-name">FleetDM + osquery (built-in tables)</div>
+      <div class="card-type">MIT core — inventory, policies, software, compliance</div>
+      <div class="card-desc">osquery exposes the OS as an SQL database. Built-in tables cover installed software (programs table on Windows, apps on macOS), running processes, listening ports, user accounts, scheduled tasks, startup items, Windows registry, system info, certificates, browser extensions, and Disk Encryption status. Fleet adds vulnerability scanning (CVE matching against NVD), policy enforcement, software deployment, and GitOps-style YAML configuration.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>SQL interface to any enrolled endpoint in &lt;30s</li>
+          <li>programs / apps tables: full software inventory</li>
+          <li>Scheduled queries: run SQL on all endpoints on cron</li>
+          <li>Live queries: ad-hoc SQL during incident response</li>
+          <li>CVE scanning: matches software inventory against NVD</li>
+          <li>Fleet MCP server: Claude Code can query live endpoints</li>
+          <li>Webhook push: policy failures, new CVEs, host offline</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Not designed for continuous high-frequency metrics (use OTel)</li>
+          <li>Query results not automatically time-series — point-in-time snapshots</li>
+          <li>MySQL + Redis infrastructure required to self-host Fleet</li>
+          <li>Custom extensions need TUF server for distribution</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT core</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">osquery Custom Extensions</div>
+      <div class="card-type">Go/Python extensions for WMI-specific data</div>
+      <div class="card-desc">osquery's standard tables cover ~90% of Windows monitoring needs via Windows APIs. Custom extensions (Go or Python) add virtual tables for data osquery doesn't have natively — specific WMI classes, hardware sensors, custom application state. Fleet supports distributing custom extensions via a custom TUF update server. The Mac Admins community publishes several ready-to-use Windows extensions.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Virtual tables — query extension data with same SQL interface</li>
+          <li>Go or Python extensions, well-documented API</li>
+          <li>Community extensions available (Mac Admins osquery Slack)</li>
+          <li>Fleet distributes via TUF server — centrally managed</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>TUF update server needed for Fleet distribution</li>
+          <li>Extension code must be signed for production deployment</li>
+          <li>Still point-in-time queries, not streaming</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-apache">Apache 2.0</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+  </div>
+  <div class="note"><strong>Data shape split:</strong> FleetDM = what is on the endpoint (inventory, posture, compliance, software, vulnerabilities). OTel Collector = how the endpoint is performing over time (CPU%, memory%, I/O rates, event log stream). Both write to your backend — Fleet via REST API/webhooks to Payload, OTel via OTLP to NestJS → TimescaleDB. Never use Fleet for continuous time-series metrics and never use OTel Collector for software inventory or policy compliance.</div>
+</div>
+
+<hr>
+
+<!-- 16. CONFIG MANAGEMENT -->
+<div class="section">
+  <p class="section-label">Layer 16 — RMM: Configuration Management</p>
+  <h2 class="section-title">Infrastructure Configuration, Scripts & Scheduling</h2>
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">Ansible + Semaphore</div>
+      <div class="card-type">GPL-3.0 + MIT — playbooks + lightweight web UI</div>
+      <div class="card-desc">Ansible playbooks define desired configuration state as YAML code in version control. Semaphore (MIT) provides a web UI with RBAC, job scheduling, inventory management, and a REST API your Payload backend can call to trigger playbook runs programmatically. Ansible's agentless model (SSH on Linux, WinRM on Windows) means no additional agent to install alongside FleetDM and OTel Collector.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Agentless — no extra agent on endpoints</li>
+          <li>Playbooks in git — version controlled, peer-reviewed, CI/CD</li>
+          <li>Semaphore REST API: Payload backend triggers playbook runs</li>
+          <li>Handles complex state: IIS config, registry, service state, firewall rules</li>
+          <li>Idempotent — safe to run repeatedly</li>
+          <li>Huge module library (thousands of community modules)</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>WinRM config required on Windows (not always enabled)</li>
+          <li>Not designed for ad-hoc script execution (use Fleet scripts for that)</li>
+          <li>Semaphore is lighter than AWX — fewer features</li>
+          <li>Ansible Galaxy modules vary in quality and maintenance</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-gpl">GPL-3.0</span><span class="badge badge-mit">Semaphore: MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">AWX (Ansible Tower upstream)</div>
+      <div class="card-type">Apache 2.0, full-featured Ansible web platform</div>
+      <div class="card-desc">The upstream open-source version of Red Hat Ansible Automation Platform. Richer than Semaphore: workflow templates, survey forms, credential management, RBAC. Kubernetes-native deployment (Operator). The right choice if you need Ansible at enterprise scale with multiple teams and approval workflows.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Workflow templates with approval gates</li>
+          <li>Survey forms for parameterized playbook runs</li>
+          <li>Enterprise RBAC and credential vault</li>
+          <li>REST API richer than Semaphore's</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Kubernetes-native — heavier to self-host than Semaphore</li>
+          <li>Overkill for a single team running RMM playbooks</li>
+          <li>Longer setup time than Semaphore</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-apache">Apache 2.0</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">Fleet Scripts (osquery scripting)</div>
+      <div class="card-type">MIT — ad-hoc script execution via Fleet</div>
+      <div class="card-desc">Fleet can execute PowerShell, bash, and Python scripts on any enrolled endpoint via the REST API or the Fleet UI. The script runs once, immediately, and returns output. Right for ad-hoc remediation (restart a service, clear a cache, kill a process) that doesn't need Ansible's configuration-state model. Script library stored in Fleet, versioned in git via GitOps YAML.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>No extra infrastructure — Fleet already installed</li>
+          <li>Results returned immediately via REST API</li>
+          <li>Script library in Fleet GitOps YAML repo</li>
+          <li>Works without WinRM (Fleet agent handles execution)</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Run-once, not idempotent configuration state</li>
+          <li>No complex dependency management (Ansible roles do this)</li>
+          <li>Not suitable for multi-step infrastructure provisioning</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> Fleet scripts for ad-hoc one-off execution (no WinRM needed, immediate results). Ansible + Semaphore for configuration-state management (IIS, registry, firewall, recurring enforcement). AWX only if you need multi-team approval workflows. The Payload backend calls Semaphore's REST API to dispatch Ansible jobs and receives webhook results back — no manual CLI needed from the dashboard.</div>
+</div>
+
+<hr>
+
+<!-- 17. QUEUING ARCHITECTURE -->
+<div class="section">
+  <p class="section-label">Layer 17 — Queuing Architecture</p>
+  <h2 class="section-title">Job Queues by Data Shape and Frequency</h2>
+
+  <div class="note" style="margin-bottom:12px">The queuing decision is not one choice — it's three tiers based on frequency, durability, and who needs to see the results.</div>
+
+  <div class="cards">
+
+    <div class="card pick">
+      <div class="card-name">Payload Jobs Queue (Tier 1)</div>
+      <div class="card-type">Postgres-backed — low-freq, auditable, management-plane</div>
+      <div class="card-desc">Postgres-backed with admin UI visibility. afterChange hooks enqueue jobs. Jobs tracked in database with retry semantics, visible to admins. Right for: billing triggers, onboarding sequences, compliance report generation, scheduled software inventory snapshots, alert digest emails. Cadence: minutes to hours between runs per job.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Jobs visible in Payload admin UI</li>
+          <li>Postgres — no extra Redis dependency</li>
+          <li>Typed tasks with Zod input validation</li>
+          <li>Cron scheduling, retry with backoff</li>
+          <li>Integrated with afterChange hooks</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Postgres polling — not for sub-second triggering</li>
+          <li>Not suited for thousands of jobs per minute</li>
+          <li>autoRun polling interval minimum ~1 min</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card pick">
+      <div class="card-name">BullMQ + Redis (Tier 2)</div>
+      <div class="card-type">Redis-backed — high-freq, RMM telemetry processing</div>
+      <div class="card-desc">Redis-backed via @nestjs/bullmq in the NestJS RMM service. Handles millions of jobs/day. Right for: OTel telemetry ingestion from endpoints (write to TimescaleDB), Fleet webhook processing (device offline, policy failure), Action1 patch completion events, alert condition evaluation against TimescaleDB. Cadence: seconds between runs, thousands per minute at scale.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Millions of jobs/day with concurrency control</li>
+          <li>Priority queues — critical alerts before routine ingestion</li>
+          <li>Rate limiting, deduplication, dead letter queues</li>
+          <li>Bull Board UI for queue monitoring</li>
+          <li>@nestjs/bullmq first-class NestJS integration</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Redis dependency to operate and monitor</li>
+          <li>Jobs not visible in Payload admin</li>
+          <li>RMM NestJS service only — not shared with Payload</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span><span class="badge badge-free">Free</span></div>
+    </div>
+
+    <div class="card">
+      <div class="card-name">Temporal (Tier 3)</div>
+      <div class="card-type">MIT — durable, long-running ERP workflows</div>
+      <div class="card-desc">Workflows that outlive process restarts — sleep for days, retry individual steps, exactly-once execution, full audit history. Right for multi-step provisioning (new client onboarding spanning days), ERP approval chains (PO → approval → dispatch → invoice), or compensation workflows (if step 3 fails, undo steps 1 and 2). Not for routine queue work — add only when a workflow needs durability across failures.</div>
+      <div class="pros-cons">
+        <div class="pros"><div class="pros-label">PROS</div><ul>
+          <li>Workflows survive server restarts and crashes</li>
+          <li>Individual step retry without restarting entire workflow</li>
+          <li>Saga pattern / compensation workflows native</li>
+          <li>Full audit timeline of every step</li>
+        </ul></div>
+        <div class="cons"><div class="cons-label">CONS</div><ul>
+          <li>Significant operational complexity</li>
+          <li>Overkill for anything below minutes-long workflows</li>
+          <li>Adds another service to the infrastructure</li>
+          <li>Cloud (Temporal Cloud) is paid; self-hosted is complex</li>
+        </ul></div>
+      </div>
+      <div class="badges"><span class="badge badge-mit">MIT</span></div>
+    </div>
+
+  </div>
+  <div class="verdict"><strong>Decision:</strong> All three tiers serve distinct purposes and can coexist. Payload Jobs for management-plane triggers. BullMQ in NestJS for high-frequency telemetry and RMM event processing. Temporal deferred until a workflow genuinely needs durability across multi-day or multi-step compensation logic — introduce it for the ERP onboarding/provisioning use case when that arises.</div>
+</div>
+
+<hr>
+
+<!-- SUMMARY TABLE -->
+<div class="section">
+  <p class="section-label">Summary</p>
+  <h2 class="section-title">Final Stack at a Glance</h2>
+  <div class="note">
+    <strong>Note on licensing:</strong> Every recommended tool is MIT, Apache 2.0, or free-tier SaaS. No BSL or AGPL in the production path. Directus and NocoBase are reference implementations only.
+  </div>
+  <br>
+  <div class="cards two">
+    <div class="card"><div class="card-name">API (edge/serverless)</div><div class="card-desc" style="margin:6px 0">Hono</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">API (RMM service)</div><div class="card-desc" style="margin:6px 0">NestJS + BullMQ</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">Management Plane CMS</div><div class="card-desc" style="margin:6px 0">Payload CMS</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">Runtime Schema Engine</div><div class="card-desc" style="margin:6px 0">Custom: Hono + Drizzle + pgroll</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">ORM</div><div class="card-desc" style="margin:6px 0">Drizzle ORM</div><div class="badges"><span class="badge badge-apache">Apache 2.0</span></div></div>
+    <div class="card"><div class="card-name">Time-Series (RMM metrics)</div><div class="card-desc" style="margin:6px 0">TimescaleDB (Postgres extension)</div><div class="badges"><span class="badge badge-free">Free self-host</span></div></div>
+    <div class="card"><div class="card-name">Mobile UI</div><div class="card-desc" style="margin:6px 0">RNR + Unistyles v3</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">Web Admin UI</div><div class="card-desc" style="margin:6px 0">Refine + shadcn/ui</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">Offline Sync</div><div class="card-desc" style="margin:6px 0">PowerSync (existing) + Electric SQL (metadata)</div><div class="badges"><span class="badge badge-saas">SaaS</span><span class="badge badge-apache">Apache 2.0</span></div></div>
+    <div class="card"><div class="card-name">Low-freq Jobs</div><div class="card-desc" style="margin:6px 0">Payload Jobs Queue</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">High-freq Jobs (RMM)</div><div class="card-desc" style="margin:6px 0">BullMQ + Redis</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">Cross-system Automation</div><div class="card-desc" style="margin:6px 0">n8n (self-hosted)</div><div class="badges"><span class="badge badge-bsl">Fair-code</span></div></div>
+    <div class="card"><div class="card-name">RMM: Device Inventory & Queries</div><div class="card-desc" style="margin:6px 0">FleetDM + osquery (+ custom extensions for WMI)</div><div class="badges"><span class="badge badge-mit">MIT core</span></div></div>
+    <div class="card"><div class="card-name">RMM: Continuous Metrics</div><div class="card-desc" style="margin:6px 0">OTel Collector → NestJS → TimescaleDB</div><div class="badges"><span class="badge badge-apache">Apache 2.0</span></div></div>
+    <div class="card"><div class="card-name">RMM: Patch Management</div><div class="card-desc" style="margin:6px 0">Action1</div><div class="badges"><span class="badge badge-saas">SaaS</span><span class="badge badge-free">Free to 200</span></div></div>
+    <div class="card"><div class="card-name">RMM: Remote Access</div><div class="card-desc" style="margin:6px 0">MeshCentral (+ ScreenConnect per-client option)</div><div class="badges"><span class="badge badge-apache">Apache 2.0</span></div></div>
+    <div class="card"><div class="card-name">RMM: Ad-hoc Scripts</div><div class="card-desc" style="margin:6px 0">Fleet Scripts (via FleetDM REST API)</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">RMM: Config Management</div><div class="card-desc" style="margin:6px 0">Ansible + Semaphore UI (REST API → Payload backend)</div><div class="badges"><span class="badge badge-gpl">GPL-3</span><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">MQTT Broker</div><div class="card-desc" style="margin:6px 0">Mosquitto (→ EMQX when cluster needed)</div><div class="badges"><span class="badge badge-apache">EPL-2.0</span><span class="badge badge-free">Free</span></div></div>
+    <div class="card"><div class="card-name">Internal Microservice Bus</div><div class="card-desc" style="margin:6px 0">NATS (broker → NestJS services)</div><div class="badges"><span class="badge badge-apache">Apache 2.0</span></div></div>
+    <div class="card"><div class="card-name">Real-time API (RMM CRUD)</div><div class="card-desc" style="margin:6px 0">FeathersJS (service → REST + WebSocket auto-wired)</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">Job Queue Tier 1 (mgmt)</div><div class="card-desc" style="margin:6px 0">Payload Jobs Queue (Postgres-backed)</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">Job Queue Tier 2 (telemetry)</div><div class="card-desc" style="margin:6px 0">BullMQ + Redis (NestJS, high-frequency)</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+    <div class="card"><div class="card-name">Job Queue Tier 3 (ERP workflows)</div><div class="card-desc" style="margin:6px 0">Temporal (when durable multi-day workflows needed)</div><div class="badges"><span class="badge badge-mit">MIT</span></div></div>
+  </div>
+</div>
+
+</body>
+</html>

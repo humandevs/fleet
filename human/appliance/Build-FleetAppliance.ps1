@@ -221,7 +221,9 @@ if (-not $RepoUrl) {
   # (.git), while nested ones need '*/' (*/.git for submodules). An --exclude-from file also dodges
   # PowerShell's native-argument quoting. (Confirmed against bsdtar 3.8.4.)
   $exFile = Join-Path $srcStage "excludes.txt"
-  @('.git','.git/*','*/.git','*/.git/*','*node_modules*','build','build/*',
+  # NOTE: do NOT exclude 'build' -- bsdtar matches it as ANY path component, which also drops the real
+  # source package orbit/pkg/build. The top-level build/ output ships (harmless; the VM rebuilds it).
+  @('.git','.git/*','*/.git','*/.git/*','*node_modules*',
     '.cache','.cache/*','*/.cache','*/.cache/*','*.vhdx') | Set-Content -Encoding Ascii $exFile
   $tarExe = Join-Path $env:SystemRoot "System32\tar.exe"   # absolute path -> guaranteed Windows bsdtar, not a PATH tar
   # Run tar as a child process and poll the growing .tar.gz so the user sees live progress (not a frozen
