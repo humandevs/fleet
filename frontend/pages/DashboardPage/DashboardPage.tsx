@@ -19,6 +19,7 @@ import {
   IEnrollSecretsResponse,
 } from "interfaces/enroll_secret";
 import { IHostSummary } from "interfaces/host_summary";
+import { IHostIntegrationStatusSummaryResponse } from "interfaces/integration_status";
 import { ILabelSummary } from "interfaces/label";
 import { IMacadminAggregate } from "interfaces/macadmins";
 import {
@@ -35,6 +36,10 @@ import { useTeamIdParam } from "hooks/useTeamIdParam";
 
 import enrollSecretsAPI from "services/entities/enroll_secret";
 import hostSummaryAPI from "services/entities/host_summary";
+import hostCountAPI, {
+  IHostsCountResponse,
+} from "services/entities/host_count";
+import hostIntegrationStatusAPI from "services/entities/host_integration_status";
 import macadminsAPI from "services/entities/macadmins";
 import softwareAPI, {
   ISoftwareQueryKey,
@@ -249,6 +254,36 @@ const DashboardPage = ({ router, location }: IDashboardProps): JSX.Element => {
           setAbmIssueCount(data.dep_assign_error_count || 0);
         }
       },
+    }
+  );
+
+  // Community-plugin coverage rollup — used to decide whether the coverage tile should render at
+  // all (no providers reporting ⇒ no tile, so a stock Fleet without the collector isn't all-red).
+  const { data: integrationStatusSummary } = useQuery<
+    IHostIntegrationStatusSummaryResponse,
+    Error
+  >(
+    ["host integration status summary", teamIdForApi],
+    () => hostIntegrationStatusAPI.getSummary({ teamId: teamIdForApi }),
+    {
+      enabled: isRouteOk,
+    }
+  );
+  const hasCoverageData = !!integrationStatusSummary?.integration_status_summary
+    ?.length;
+
+  // Coverage "problem devices" count: hosts with no coverage cells or any non-protected/stale
+  // cell. Uses the hosts-count endpoint so the tile matches the filtered host list exactly.
+  const { data: coverageProblemsCount } = useQuery<
+    IHostsCountResponse,
+    Error,
+    number
+  >(
+    ["coverage problems count", teamIdForApi],
+    () => hostCountAPI.load({ teamId: teamIdForApi, coverageProblems: true }),
+    {
+      enabled: isRouteOk && hasCoverageData,
+      select: (data) => data.count,
     }
   );
 
@@ -637,6 +672,9 @@ const DashboardPage = ({ router, location }: IDashboardProps): JSX.Element => {
       missingCount={missingCount}
       lowDiskSpaceCount={lowDiskSpaceCount}
       abmIssueCount={abmIssueCount}
+      coverageProblemsCount={
+        hasCoverageData ? coverageProblemsCount : undefined
+      }
       selectedPlatformLabelId={selectedPlatformLabelId}
     />
   );

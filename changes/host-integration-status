@@ -3,3 +3,9 @@
   integration status" store — like the MacAdmins card, but generic. Providers write per-host cells; the
   read path renders cells older than a per-category freshness window as "unknown" so stale data is never
   shown as covered.
+- Added `GET /api/latest/fleet/host_integration_status/summary`, a viewer- and fleet-scoped rollup of
+  coverage cells by (source, category, state) for dashboard tiles; stale cells count as "unknown".
+- Added a `coverage_problems` filter to the hosts list and count endpoints: hosts with no coverage data
+  at all, or any non-protected/stale coverage cell ("problem devices").
+- Added a "Problem devices" dashboard tile (shown once coverage providers report) linking to the
+  filtered host list, plus a matching filter pill on the hosts page.

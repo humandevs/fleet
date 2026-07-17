@@ -23,9 +23,12 @@ const coverageFreshExpr = "s.updated_at > (NOW(6) - INTERVAL (CASE s.category " 
 // expression. Pure and unit-testable (no DB). Returns nil conds for a zero filter.
 func coverageFilterConds(f fleet.CoverageFilter) (conds []string, args []any) {
 	if f.Problems {
-		// Any effectively-non-protected cell: wrong state OR gone stale.
-		conds = append(conds, "EXISTS (SELECT 1 FROM host_integration_status s WHERE s.host_id = h.id "+
-			"AND (s.state <> 'protected' OR NOT ("+coverageFreshExpr+")))")
+		// A problem host either has no coverage cells at all (never reported by any provider — the
+		// N-able "no data ⇒ RED" rule) or has any effectively-non-protected cell (wrong state OR gone
+		// stale past its TTL).
+		conds = append(conds, "(NOT EXISTS (SELECT 1 FROM host_integration_status s WHERE s.host_id = h.id) "+
+			"OR EXISTS (SELECT 1 FROM host_integration_status s WHERE s.host_id = h.id "+
+			"AND (s.state <> 'protected' OR NOT ("+coverageFreshExpr+"))))")
 	}
 	for _, cat := range f.MissingCategories {
 		// No fresh protected cell for this category.
@@ -46,6 +49,22 @@ func coverageFilterConds(f fleet.CoverageFilter) (conds []string, args []any) {
 		args = append(args, string(p.Category), string(p.State))
 	}
 	return conds, args
+}
+
+// filterHostsByCoverage appends the community coverage conditions to a host-list query (see
+// applyHostFilters), reusing coverageFilterConds so the "problem devices" host list matches the coverage
+// matrix exactly. It is a no-op for a zero CoverageFilter, and is safe to chain alongside the other
+// filterHostsBy* helpers: it only appends AND-conditions (against host alias `h`) plus their params, before
+// ORDER BY / LIMIT are added.
+func filterHostsByCoverage(sql string, opt fleet.HostListOptions, params []interface{}) (string, []interface{}) {
+	if opt.CoverageFilter.IsZero() {
+		return sql, params
+	}
+	conds, args := coverageFilterConds(opt.CoverageFilter)
+	for _, c := range conds {
+		sql += " AND " + c
+	}
+	return sql, append(params, args...)
 }
 
 // SetOrUpdateHostIntegrationStatus upserts one (host, source, category) coverage cell reported by a
@@ -101,31 +120,43 @@ func (ds *Datastore) ListHostsByCoverage(ctx context.Context, f fleet.CoverageFi
 	return ids, nil
 }
 
-// AggregatedHostIntegrationStatus returns a fleet-wide, optionally team-scoped, rollup of coverage
-// cells grouped by (source, category, state).
-func (ds *Datastore) AggregatedHostIntegrationStatus(ctx context.Context, teamID *uint) ([]*fleet.AggregatedIntegrationStatus, error) {
-	const stmtAll = `
-SELECT source, category, state, COUNT(*) AS count
-FROM host_integration_status
-GROUP BY source, category, state
-ORDER BY source, category, state
+// coverageEffectiveStateExpr renders a cell's effective state for rollups: a row past its category
+// TTL counts as "unknown", so dashboard tiles never count stale data as covered (the same invariant
+// as applyIntegrationStaleness and coverageFilterConds).
+const coverageEffectiveStateExpr = "IF(" + coverageFreshExpr + ", s.state, 'unknown')"
+
+// buildAggregatedIntegrationStatusStmt assembles the rollup statement from WHERE conditions
+// (against host alias `h`); hoisted so the pure builder test can pin the staleness-aware grouping
+// without a DB.
+func buildAggregatedIntegrationStatusStmt(conds []string) string {
+	return `
+SELECT s.source, s.category, ` + coverageEffectiveStateExpr + ` AS state, COUNT(*) AS count
+FROM host_integration_status s
+JOIN hosts h ON h.id = s.host_id
+WHERE ` + strings.Join(conds, " AND ") + `
+GROUP BY s.source, s.category, ` + coverageEffectiveStateExpr + `
+ORDER BY s.source, s.category, state
 `
-	const stmtTeam = `
-SELECT his.source, his.category, his.state, COUNT(*) AS count
-FROM host_integration_status his
-JOIN hosts h ON h.id = his.host_id
-WHERE h.team_id = ?
-GROUP BY his.source, his.category, his.state
-ORDER BY his.source, his.category, his.state
-`
-	var rows []*fleet.AggregatedIntegrationStatus
-	var err error
+}
+
+// AggregatedHostIntegrationStatus returns a rollup of coverage cells grouped by (source, category,
+// effective state), where a cell past its freshness TTL is counted as "unknown" rather than its
+// last-written state. The rollup is always viewer-scoped via the team filter (a team-scoped user
+// only ever sees their own teams' cells), and optionally restricted to one team — teamID 0 means
+// hosts with no team, matching the team_id API convention.
+func (ds *Datastore) AggregatedHostIntegrationStatus(ctx context.Context, filter fleet.TeamFilter, teamID *uint) ([]*fleet.AggregatedIntegrationStatus, error) {
+	conds := []string{ds.whereFilterHostsByTeams(filter, "h")}
+	var args []any
 	if teamID != nil {
-		err = sqlx.SelectContext(ctx, ds.reader(ctx), &rows, stmtTeam, *teamID)
-	} else {
-		err = sqlx.SelectContext(ctx, ds.reader(ctx), &rows, stmtAll)
+		if *teamID == 0 {
+			conds = append(conds, "h.team_id IS NULL")
+		} else {
+			conds = append(conds, "h.team_id = ?")
+			args = append(args, *teamID)
+		}
 	}
-	if err != nil {
+	var rows []*fleet.AggregatedIntegrationStatus
+	if err := sqlx.SelectContext(ctx, ds.reader(ctx), &rows, buildAggregatedIntegrationStatusStmt(conds), args...); err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "aggregated host integration status")
 	}
 	return rows, nil

@@ -69,7 +69,10 @@ if ($Build) {
   New-Item -ItemType Directory -Force -Path $stage | Out-Null
   $tgz = Join-Path $stage "fleet-src.tar.gz"
   $exFile = Join-Path $stage "excludes.txt"
-  @('.git','.git/*','*/.git','*/.git/*','*node_modules*','build','build/*','.cache','.cache/*','*/.cache','*/.cache/*','*.vhdx') |
+  # NOTE: do NOT exclude 'build' -- bsdtar matches it as ANY path component, which also drops the real
+  # source package orbit/pkg/build (the server fails to compile: "no required module provides package
+  # .../orbit/pkg/build"). Same note in Build-FleetAppliance.ps1; keep these lists in sync.
+  @('.git','.git/*','*/.git','*/.git/*','*node_modules*','.cache','.cache/*','*/.cache','*/.cache/*','*.vhdx') |
     Set-Content -Encoding Ascii $exFile
   $tarExe = Join-Path $env:SystemRoot "System32\tar.exe"
   & $tarExe -czf $tgz -C $RepoSource --exclude-from=$exFile .

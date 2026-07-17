@@ -1239,8 +1239,9 @@ type Datastore interface {
 	// ListHostIntegrationStatus returns all coverage cells for a host (staleness applied at the
 	// service layer).
 	ListHostIntegrationStatus(ctx context.Context, hostID uint) ([]*HostIntegrationStatus, error)
-	// AggregatedHostIntegrationStatus returns a fleet-wide, optionally team-scoped, coverage rollup.
-	AggregatedHostIntegrationStatus(ctx context.Context, teamID *uint) ([]*AggregatedIntegrationStatus, error)
+	// AggregatedHostIntegrationStatus returns a viewer-scoped, optionally team-scoped, coverage
+	// rollup (teamID 0 means hosts with no team). Cells past their freshness TTL count as "unknown".
+	AggregatedHostIntegrationStatus(ctx context.Context, filter TeamFilter, teamID *uint) ([]*AggregatedIntegrationStatus, error)
 	// ListHostsByCoverage returns the IDs of hosts matching the coverage filter, powering N-able-style
 	// saved views ("only hosts with problems", "hosts missing Managed AV"). Freshness is applied in SQL
 	// so a stale "protected" is treated as a gap. Returns nil for a zero filter.

@@ -39,6 +39,17 @@ type Config struct {
 	// self-hosted server with a self-signed cert when you also override RelayHost. Leave empty to use the
 	// installer default.
 	Thumbprint string
+	// InstanceID is OUR ScreenConnect instance's identifier — the 16-hex string ScreenConnect derives from
+	// this server and stamps into every agent it builds. The Windows service is named
+	// "ScreenConnect Client (<InstanceID>)" and it installs under
+	// "C:\Program Files (x86)\ScreenConnect Client (<InstanceID>)\". It is REQUIRED for local (osquery)
+	// presence detection: multiple vendors' ScreenConnect agents coexist side-by-side on one host, so
+	// matching "any ScreenConnect service" would report a competitor's agent as ours. This is the instance
+	// id, NOT Thumbprint (that is the TLS cert fingerprint / installer k= param). Find it in the
+	// ScreenConnect admin console or as the "(...)" suffix of an already-installed service. Leave empty to
+	// skip local presence detection — the API-poll coverage path (InstanceURL + AccessSecret) is already
+	// instance-scoped and does not need it.
+	InstanceID string
 	// AccessSecret is the RESTful API Manager shared secret (sent as the CTRLAuthHeader header) used to
 	// poll session/online status. Optional: if empty, Collect is a no-op (deployment-only mode).
 	AccessSecret string
@@ -125,6 +136,30 @@ func (p *Provider) Categories() []fleet.IntegrationCategory {
 	return []fleet.IntegrationCategory{fleet.IntegrationCategoryRemoteAccess}
 }
 
+// ServiceName returns the Windows service / installed-program name of OUR access agent —
+// "ScreenConnect Client (<InstanceID>)". This is how we tell our instance apart from other vendors'
+// ScreenConnect agents on the same host. Returns "" when InstanceID is unset (presence detection disabled).
+func (p *Provider) ServiceName() string {
+	if p.cfg.InstanceID == "" {
+		return ""
+	}
+	return fmt.Sprintf("ScreenConnect Client (%s)", p.cfg.InstanceID)
+}
+
+// PresenceQuery returns an osquery query that passes (returns a row) only when OUR access agent is present
+// AND its service is RUNNING on a Windows host — matched by InstanceID so a side-by-side competitor's
+// ScreenConnect never counts as ours. Use it as the Fleet policy that gates the keep-installed reinstall
+// (policy fails ⇒ run WindowsInstallScript). Returns "" when InstanceID is unset.
+func (p *Provider) PresenceQuery() string {
+	name := p.ServiceName()
+	if name == "" {
+		return ""
+	}
+	// Instance IDs are hex, but escape defensively — a stray quote must not break out of the literal.
+	return fmt.Sprintf("SELECT 1 FROM services WHERE name = '%s' AND status = 'RUNNING';",
+		strings.ReplaceAll(name, "'", "''"))
+}
+
 // InstallerURL builds the org-linked access-agent installer URL for a host. t= sets the session name (the
 // Fleet hostname); e=Access selects the unattended access session type; the repeated c= values populate
 // ScreenConnect CustomProperty1..8 in order — this is what links the device to the right group
@@ -181,6 +216,7 @@ Invoke-WebRequest -Uri $url -OutFile $msi -UseBasicParsing
 //  1. A supported RESTful API Manager method, if the installed extension exposes SessionGroup CRUD.
 //  2. Manage the server config directly (write SessionGroup elements) — viable because we self-host.
 //  3. Internal page service (version-fragile) as a last resort — avoid as primary.
+//
 // Kept as the provisioning seam so the Fleet team/site lifecycle hook has something to call. See
 // human/setup/screenconnect.md § "Group provisioning".
 func (p *Provider) EnsureSessionGroup(ctx context.Context, client string, sites ...string) error {

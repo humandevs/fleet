@@ -1504,6 +1504,7 @@ func (ds *Datastore) applyHostFilters(
 	sqlStmt, whereParams = filterHostsByPolicy(sqlStmt, opt, whereParams)
 	sqlStmt, whereParams = filterHostsByMDM(sqlStmt, opt, whereParams)
 	sqlStmt, whereParams = filterHostsByConnectedToFleet(sqlStmt, opt, whereParams)
+	sqlStmt, whereParams = filterHostsByCoverage(sqlStmt, opt, whereParams)
 	var err error
 	sqlStmt, whereParams, err = filterHostsByMacOSSettingsStatus(sqlStmt, opt, whereParams)
 	if err != nil {

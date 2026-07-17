@@ -534,6 +534,29 @@ func hostListOptionsFromRequest(r *http.Request) (fleet.HostListOptions, error) 
 		hopt.LowDiskSpaceFilter = &v
 	}
 
+	// Coverage filters (fork/community): the "problem devices" view and coverage drill-downs, matching the
+	// coverage matrix. e.g. coverage_problems=1, coverage_missing=av,mdr, or coverage_category=av&coverage_state=at_risk.
+	if problems := r.URL.Query().Get("coverage_problems"); problems != "" {
+		v, err := strconv.ParseBool(problems)
+		if err != nil {
+			return hopt, ctxerr.Wrap(r.Context(), badRequest(fmt.Sprintf("Invalid coverage_problems: %s", problems)))
+		}
+		hopt.CoverageFilter.Problems = v
+	}
+	if missing := r.URL.Query().Get("coverage_missing"); missing != "" {
+		for _, c := range strings.Split(missing, ",") {
+			if c = strings.TrimSpace(c); c != "" {
+				hopt.CoverageFilter.MissingCategories = append(hopt.CoverageFilter.MissingCategories, fleet.IntegrationCategory(c))
+			}
+		}
+	}
+	if cat, state := r.URL.Query().Get("coverage_category"), r.URL.Query().Get("coverage_state"); cat != "" && state != "" {
+		hopt.CoverageFilter.StatePredicates = append(hopt.CoverageFilter.StatePredicates, fleet.CoverageStatePredicate{
+			Category: fleet.IntegrationCategory(cat),
+			State:    fleet.IntegrationState(state),
+		})
+	}
+
 	batchScriptExecutionID := r.URL.Query().Get("script_batch_execution_id")
 	if batchScriptExecutionID != "" {
 		hopt.BatchScriptExecutionIDFilter = &batchScriptExecutionID

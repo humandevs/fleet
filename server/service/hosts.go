@@ -304,7 +304,6 @@ func listHostsEndpoint(ctx context.Context, request interface{}, svc fleet.Servi
 		st, err := svc.SoftwareTitleByID(ctx, titleID, req.Opts.TeamFilter)
 		switch {
 		case err == nil:
-			fmt.Println("regular")
 			softwareTitle = st
 
 		case fleet.IsNotFound(err):
@@ -314,7 +313,6 @@ func listHostsEndpoint(ctx context.Context, request interface{}, svc fleet.Servi
 				return listHostsResponse{Err: errName}, nil
 			}
 			if errName == nil {
-				fmt.Println("here")
 				softwareTitle = &fleet.SoftwareTitle{
 					ID: titleID,
 				}

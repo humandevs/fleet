@@ -19,14 +19,17 @@
   loop:
     - "{{ fleet_config_dir }}"
     - "{{ fleet_tls_dir }}"
+    - "{{ fleet_log_dir }}"
 
 # --- Build (source is already at {{ fleet_src_dir }}: FLEETSRC extract or git clone) ---
+# The HOME export: firstboot runs under systemd with no HOME, so Go cannot derive GOPATH/GOCACHE
+# ("neither GOMODCACHE nor GOPATH is set"). Push mode already has HOME set, which is kept.
+# NOTE: no apostrophes or unbalanced quotes inside the shell block below (even in comments) —
+# ansible's free-form argument splitting parses the whole block and errors on them.
 - name: Build fleet (deps + frontend assets + binary)
   ansible.builtin.shell: |
     set -e
     export PATH=$PATH:/usr/local/go/bin
-    # firstboot runs under systemd with no HOME, so Go can't derive GOPATH/GOCACHE ("neither GOMODCACHE
-    # nor GOPATH is set"). Give it one (push mode already has HOME=/home/fleetadmin, so keep it if set).
     export HOME="${HOME:-/root}"
     make deps
     make generate

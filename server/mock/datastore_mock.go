@@ -860,7 +860,7 @@ type SetOrUpdateHostIntegrationStatusFunc func(ctx context.Context, status *flee
 
 type ListHostIntegrationStatusFunc func(ctx context.Context, hostID uint) ([]*fleet.HostIntegrationStatus, error)
 
-type AggregatedHostIntegrationStatusFunc func(ctx context.Context, teamID *uint) ([]*fleet.AggregatedIntegrationStatus, error)
+type AggregatedHostIntegrationStatusFunc func(ctx context.Context, filter fleet.TeamFilter, teamID *uint) ([]*fleet.AggregatedIntegrationStatus, error)
 
 type ListHostsByCoverageFunc func(ctx context.Context, filter fleet.CoverageFilter) ([]uint, error)
 
@@ -8204,11 +8204,11 @@ func (s *DataStore) ListHostIntegrationStatus(ctx context.Context, hostID uint) 
 	return s.ListHostIntegrationStatusFunc(ctx, hostID)
 }
 
-func (s *DataStore) AggregatedHostIntegrationStatus(ctx context.Context, teamID *uint) ([]*fleet.AggregatedIntegrationStatus, error) {
+func (s *DataStore) AggregatedHostIntegrationStatus(ctx context.Context, filter fleet.TeamFilter, teamID *uint) ([]*fleet.AggregatedIntegrationStatus, error) {
 	s.mu.Lock()
 	s.AggregatedHostIntegrationStatusFuncInvoked = true
 	s.mu.Unlock()
-	return s.AggregatedHostIntegrationStatusFunc(ctx, teamID)
+	return s.AggregatedHostIntegrationStatusFunc(ctx, filter, teamID)
 }
 
 func (s *DataStore) ListHostsByCoverage(ctx context.Context, filter fleet.CoverageFilter) ([]uint, error) {

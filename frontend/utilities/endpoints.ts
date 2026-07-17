@@ -113,6 +113,7 @@ export default {
   HOST_INTEGRATION_STATUS: (id: number) =>
     `/${API_VERSION}/fleet/hosts/${id}/integration_status`,
   HOSTS_COVERAGE: `/${API_VERSION}/fleet/hosts/coverage`,
+  HOST_INTEGRATION_STATUS_SUMMARY: `/${API_VERSION}/fleet/host_integration_status/summary`,
   HOST_DEVICE_MAPPING: (id: number) =>
     `/${API_VERSION}/fleet/hosts/${id}/device_mapping`,
   HOST_DEVICE_MAPPING_IDP: (id: number) =>

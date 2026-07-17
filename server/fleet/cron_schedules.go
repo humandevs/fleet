@@ -59,6 +59,10 @@ const (
 	CronAppleMDMWorker                          CronScheduleName = "apple_mdm_worker"
 	CronChartDataCollection                     CronScheduleName = "chart_data_collection" // Used by chart bounded context
 	CronCleanupExpiredADUEChallenges            CronScheduleName = "cleanup_expired_adue_challenges"
+	// CronCommunityHostStatus polls the fork's community integration providers (ScreenConnect, Splashtop,
+	// Bitdefender, Action1) for per-host coverage status and upserts host_integration_status rows. Runs every
+	// 5 minutes and only when at least one FLEET_COMMUNITY_* provider is configured (fork-only).
+	CronCommunityHostStatus CronScheduleName = "community_host_status"
 )
 
 type CronSchedulesService interface {

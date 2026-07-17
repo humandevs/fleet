@@ -39,6 +39,10 @@ fleet_redis_address: "127.0.0.1:6379"
 fleet_server_address: "0.0.0.0:8080"
 fleet_tls_dir: "/etc/fleet/tls"
 fleet_config_dir: "/etc/fleet"
+# Writable home for Fleet's filesystem loggers (osquery status/result). The unit runs with
+# ProtectSystem=strict, so Fleet's /tmp defaults crash the service ("read-only file system") —
+# these live here instead, and the unit grants ReadWritePaths on it.
+fleet_log_dir: "/var/log/fleet"
 
 # --- DR flag: prod runs the service; the spare stays stopped until failover ---
 fleet_service_state: "started"   # overridden to "stopped" in group_vars for fleet_dr (see README)

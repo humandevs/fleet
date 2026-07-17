@@ -275,6 +275,11 @@ type HostListOptions struct {
 	// VulnerabilityFilter filters the hosts by the presence of a vulnerability (CVE)
 	VulnerabilityFilter *string
 
+	// CoverageFilter (fork/community) filters hosts by third-party integration coverage: "problem devices"
+	// (any non-protected or stale cell), missing categories, or an exact category+state — using the same
+	// freshness-aware matching as the coverage matrix. The zero value applies no coverage filtering.
+	CoverageFilter CoverageFilter
+
 	// ConnectedToFleetFilter filters hosts that have an active MDM
 	// connection with this Fleet instance.
 	ConnectedToFleetFilter *bool

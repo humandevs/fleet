@@ -16,11 +16,14 @@ EnvironmentFile={{ fleet_config_dir }}/fleet.env
 ExecStart={{ fleet_bin }} serve
 Restart=on-failure
 RestartSec=15
-# Fleet is stateless on disk; keep it locked down.
+# Fleet is stateless on disk; keep it locked down. PrivateTmp gives it a writable private /tmp
+# (ProtectSystem=strict makes the real one read-only); the log dir holds the osquery filesystem
+# loggers (see fleet.env).
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths={{ fleet_config_dir }}
+PrivateTmp=true
+ReadWritePaths={{ fleet_config_dir }} {{ fleet_log_dir }}
 
 [Install]
 WantedBy=multi-user.target

@@ -34,3 +34,17 @@ export interface IHostsByCoverageResponse {
   count: number;
   host_ids: number[];
 }
+
+/** One row of the fleet-wide coverage rollup: how many cells a provider reported for a
+ * (source, category, state) combination. Cells past their freshness TTL are counted as "unknown"
+ * by the server. */
+export interface IIntegrationStatusSummaryItem {
+  source: string;
+  category: IntegrationCoverageCategory;
+  state: IntegrationCoverageState;
+  count: number;
+}
+
+export interface IHostIntegrationStatusSummaryResponse {
+  integration_status_summary: IIntegrationStatusSummaryItem[] | null;
+}

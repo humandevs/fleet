@@ -475,6 +475,10 @@ type Service interface {
 	// HostsByCoverage returns the IDs of hosts matching a coverage filter (N-able-style views:
 	// "only problems", "missing Managed AV"). MIT/free feature.
 	HostsByCoverage(ctx context.Context, filter CoverageFilter) ([]uint, error)
+	// AggregatedHostIntegrationStatus returns a fleet-wide, optionally team-scoped, rollup of
+	// coverage cells grouped by (source, category, state), with cells past their freshness TTL
+	// counted as "unknown". Powers the coverage dashboard tiles. MIT/free feature.
+	AggregatedHostIntegrationStatus(ctx context.Context, teamID *uint) ([]*AggregatedIntegrationStatus, error)
 	MDMData(ctx context.Context, id uint) (*HostMDM, error)
 	AggregatedMacadminsData(ctx context.Context, teamID *uint) (*AggregatedMacadminsData, error)
 	AggregatedMDMData(ctx context.Context, id *uint, platform string) (AggregatedMDMData, error)

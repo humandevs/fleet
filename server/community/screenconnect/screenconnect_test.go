@@ -106,6 +106,22 @@ func TestInstallerURLSelfHostedRelay(t *testing.T) {
 	)
 }
 
+func TestPresenceQueryScopedToOurInstance(t *testing.T) {
+	// With our InstanceID set, presence matches ONLY our service name — a side-by-side competitor's
+	// "ScreenConnect Client (<their id>)" does not satisfy this query.
+	p := New(Config{InstanceURL: "https://x", InstanceID: "a1b2c3d4e5f6a7b8"})
+	require.Equal(t, "ScreenConnect Client (a1b2c3d4e5f6a7b8)", p.ServiceName())
+	require.Equal(t,
+		"SELECT 1 FROM services WHERE name = 'ScreenConnect Client (a1b2c3d4e5f6a7b8)' AND status = 'RUNNING';",
+		p.PresenceQuery(),
+	)
+
+	// Without an InstanceID, local presence detection is disabled (can't tell our agent from a competitor's).
+	none := New(Config{InstanceURL: "https://x"})
+	require.Empty(t, none.ServiceName())
+	require.Empty(t, none.PresenceQuery())
+}
+
 func TestValidate(t *testing.T) {
 	require.NoError(t, Config{InstanceURL: "https://remote.example.com:8040"}.Validate())
 	// Self-hosted has no default domain — empty or non-absolute URLs must fail loudly.

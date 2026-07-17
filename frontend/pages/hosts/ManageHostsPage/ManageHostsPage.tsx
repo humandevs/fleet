@@ -361,6 +361,10 @@ const ManageHostsPage = ({
   const depProfileError = queryParams?.dep_profile_error;
   /** URL converts to lowercase but API and UI requires uppercase */
   const depAssignProfileResponse = queryParams?.dep_assign_profile_response?.toUpperCase();
+  const coverageProblems =
+    queryParams?.[HOSTS_QUERY_PARAMS.COVERAGE_PROBLEMS] !== undefined
+      ? queryParams[HOSTS_QUERY_PARAMS.COVERAGE_PROBLEMS] !== "false"
+      : undefined;
 
   // ========= routeParams
   const { label_id: labelID } = routeParams;
@@ -625,6 +629,7 @@ const ManageHostsPage = ({
         scriptBatchExecutionId,
         depProfileError: strToBool(depProfileError),
         depAssignProfileResponse,
+        coverageProblems,
       },
     ],
     ({ queryKey }) => hostsAPI.loadHosts(queryKey[0]),
@@ -670,6 +675,7 @@ const ManageHostsPage = ({
         configProfileUUID,
         scriptBatchExecutionStatus,
         scriptBatchExecutionId,
+        coverageProblems,
       },
     ],
     ({ queryKey }) => hostCountAPI.load(queryKey[0]),
@@ -1164,6 +1170,8 @@ const ManageHostsPage = ({
         newQueryParams.dep_profile_error = depProfileError;
       } else if (depAssignProfileResponse) {
         newQueryParams.dep_assign_profile_response = depAssignProfileResponse;
+      } else if (coverageProblems) {
+        newQueryParams[HOSTS_QUERY_PARAMS.COVERAGE_PROBLEMS] = "true";
       }
 
       router.replace(
@@ -1211,6 +1219,7 @@ const ManageHostsPage = ({
       softwareStatus,
       depProfileError,
       depAssignProfileResponse,
+      coverageProblems,
     ]
   );
 
@@ -2114,6 +2123,7 @@ const ManageHostsPage = ({
             scriptBatchScriptName: scriptBatchSummary?.script_name || null,
             depProfileError,
             depAssignProfileResponse,
+            coverageProblems,
           }}
           selectedLabel={selectedLabel}
           isOnlyObserver={isOnlyObserver}

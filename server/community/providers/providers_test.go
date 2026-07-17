@@ -17,13 +17,18 @@ func TestRegister(t *testing.T) {
 		sources = append(sources, p.Source())
 	}
 	require.ElementsMatch(t,
-		[]string{"screenconnect", "bitdefender", "action1", "huntress", "veeam", "idrive360", "warp"},
+		[]string{"screenconnect", "splashtop", "bitdefender", "action1", "huntress", "veeam", "idrive360", "warp"},
 		sources,
 	)
 }
 
-func TestRegisterRequiresSelfHostedURL(t *testing.T) {
-	// Self-hosted has no default domain — an unset ScreenConnect URL must stop wiring.
-	err := Register(community.NewRegistry(), Config{})
+func TestRegisterValidatesConfiguredScreenConnectURL(t *testing.T) {
+	// An empty config is valid — every provider simply no-ops until configured, so the collector can be
+	// wired without forcing ScreenConnect on deployments that only use other providers.
+	require.NoError(t, Register(community.NewRegistry(), Config{}))
+
+	// But a CONFIGURED, malformed ScreenConnect URL must still fail loudly (self-hosted has no default
+	// domain, so a typo would otherwise produce broken installs).
+	err := Register(community.NewRegistry(), Config{ScreenConnect: screenconnect.Config{InstanceURL: "not-a-url"}})
 	require.Error(t, err)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/fleetdm/fleet/v4/server/community/huntress"
 	"github.com/fleetdm/fleet/v4/server/community/idrive360"
 	"github.com/fleetdm/fleet/v4/server/community/screenconnect"
+	"github.com/fleetdm/fleet/v4/server/community/splashtop"
 	"github.com/fleetdm/fleet/v4/server/community/veeam"
 	"github.com/fleetdm/fleet/v4/server/community/warp"
 )
@@ -17,20 +18,28 @@ import (
 // Config holds per-provider configuration for the community registry.
 type Config struct {
 	ScreenConnect screenconnect.Config
+	Splashtop     splashtop.Config
 	Bitdefender   bitdefender.Config
 	Action1       action1.Config
 }
 
-// Register adds the first-party community host-status providers to r. ScreenConnect (remote access),
-// Bitdefender GravityZone (av/mdr), and Action1 (patching) are functional Collectors — they no-op when
-// unconfigured. Huntress/Veeam/iDrive360/WARP are metadata-only scaffolds (declare their column, no
+// Register adds the first-party community host-status providers to r. ScreenConnect + Splashtop (remote
+// access), Bitdefender GravityZone (av/mdr), and Action1 (patching) are functional Collectors — they no-op
+// when unconfigured. Huntress/Veeam/iDrive360/WARP are metadata-only scaffolds (declare their column, no
 // ingestion yet). Real-vs-mock status is documented per human/setup/*. It validates provider config up
 // front — a missing self-hosted ScreenConnect URL fails here rather than producing broken installs.
 func Register(r *community.Registry, cfg Config) error {
-	if err := cfg.ScreenConnect.Validate(); err != nil {
-		return err
+	// ScreenConnect's URL is validated only when it's configured: an empty InstanceURL means the provider is
+	// simply disabled (Collect no-ops), so an all-empty config or a config using only OTHER providers
+	// (Splashtop/Bitdefender/Action1) is valid and must not fail. A NON-empty but malformed URL still fails
+	// loudly here (catches a typo before it produces broken installs).
+	if cfg.ScreenConnect.InstanceURL != "" {
+		if err := cfg.ScreenConnect.Validate(); err != nil {
+			return err
+		}
 	}
 	r.RegisterHostStatusProvider(screenconnect.New(cfg.ScreenConnect)) // remote_access (functional)
+	r.RegisterHostStatusProvider(splashtop.New(cfg.Splashtop))         // remote_access (functional, backup)
 	r.RegisterHostStatusProvider(bitdefender.New(cfg.Bitdefender))     // av + mdr      (functional)
 	r.RegisterHostStatusProvider(action1.New(cfg.Action1))             // patching      (functional)
 	r.RegisterHostStatusProvider(huntress.New())                       // mdr           (scaffold)

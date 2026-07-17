@@ -354,4 +354,15 @@ func registerMiscCrons(ctx context.Context, deps cronSchedulesDeps) {
 	deps.register("failed to register batch activity completion checker schedule", func() (fleet.CronSchedule, error) {
 		return newBatchActivityCompletionCheckerSchedule(ctx, deps.instanceID, deps.ds, deps.logger)
 	})
+
+	// Fork-only: community host-status collector (ScreenConnect/Splashtop/Bitdefender/Action1). Registered
+	// only when at least one FLEET_COMMUNITY_* provider is configured, so stock deployments don't run a
+	// no-op cron.
+	if cfg, ok := communityProvidersConfigFromEnv(); ok {
+		deps.register("failed to register community host status schedule", func() (fleet.CronSchedule, error) {
+			return newCommunityHostStatusSchedule(ctx, deps.instanceID, deps.ds, deps.logger, cfg)
+		})
+	} else {
+		deps.logger.InfoContext(ctx, "community host-status collector not configured; skipping (set FLEET_COMMUNITY_* env vars to enable)")
+	}
 }

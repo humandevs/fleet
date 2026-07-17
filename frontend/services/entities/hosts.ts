@@ -102,6 +102,7 @@ export const HOSTS_QUERY_PARAMS = {
   SCRIPT_BATCH_EXECUTION_STATUS: "script_batch_execution_status",
   SCRIPT_BATCH_EXECUTION_ID: "script_batch_execution_id",
   COVERAGE: "coverage",
+  COVERAGE_PROBLEMS: "coverage_problems",
 } as const;
 
 export interface ILoadHostsQueryKey extends ILoadHostsOptions {
@@ -145,6 +146,9 @@ export interface ILoadHostsOptions {
   scriptBatchExecutionId?: string;
   depProfileError?: boolean;
   depAssignProfileResponse?: DepAssignProfileResponse;
+  /** Coverage "problem devices" filter: hosts with no coverage cells at all, or any
+   * non-protected/stale cell (community-plugin coverage matrix). */
+  coverageProblems?: boolean;
 }
 
 export interface IExportHostsOptions {
@@ -501,6 +505,7 @@ export default {
     scriptBatchExecutionId,
     depProfileError,
     depAssignProfileResponse,
+    coverageProblems,
   }: ILoadHostsOptions): Promise<ILoadHostsResponse> => {
     const label = getLabel(selectedLabels);
     const sortParams = getSortParams(sortBy);
@@ -545,6 +550,7 @@ export default {
         scriptBatchExecutionId,
         depProfileError,
         depAssignProfileResponse,
+        coverageProblems,
       }),
     };
 
@@ -580,9 +586,7 @@ export default {
   // getHostsByCoverage returns the host IDs matching a coverage filter view. `coverage` is the URL param
   // value: "problems" or "missing:<cat>[,<cat>]" (see CoverageFilter). Translated to the endpoint's
   // problems/missing params here so callers work in the UI's vocabulary.
-  getHostsByCoverage: (
-    coverage: string
-  ): Promise<IHostsByCoverageResponse> => {
+  getHostsByCoverage: (coverage: string): Promise<IHostsByCoverageResponse> => {
     const { HOSTS_COVERAGE } = endpoints;
     const params: Record<string, string | boolean | undefined> = {};
     if (coverage === "problems") {

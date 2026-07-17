@@ -16,6 +16,12 @@ import (
 	"github.com/fleetdm/fleet/v4/server"
 	activity_api "github.com/fleetdm/fleet/v4/server/activity/api"
 	chart_api "github.com/fleetdm/fleet/v4/server/chart/api"
+	"github.com/fleetdm/fleet/v4/server/community"
+	"github.com/fleetdm/fleet/v4/server/community/action1"
+	"github.com/fleetdm/fleet/v4/server/community/bitdefender"
+	"github.com/fleetdm/fleet/v4/server/community/providers"
+	"github.com/fleetdm/fleet/v4/server/community/screenconnect"
+	"github.com/fleetdm/fleet/v4/server/community/splashtop"
 	"github.com/fleetdm/fleet/v4/server/config"
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/contexts/license"
@@ -2140,6 +2146,79 @@ func cronBatchActivityCompletionChecker(
 	}
 	// TODO -- add an entry in the global feed for each completed activity?
 	return nil
+}
+
+// communityProvidersConfigFromEnv assembles the community host-status provider config from FLEET_COMMUNITY_*
+// environment variables. It returns (cfg, true) when at least one provider is configured, or (zero, false)
+// when nothing is set — the caller then skips registering the collector schedule so a stock deployment never
+// runs a no-op cron. Secrets are read from env for the MVP; a later revision moves them into app_config
+// (envelope-encrypted, per human/RISK-REGISTER.md). See human/setup/*.
+func communityProvidersConfigFromEnv() (providers.Config, bool) {
+	env := os.Getenv
+	cfg := providers.Config{
+		ScreenConnect: screenconnect.Config{
+			InstanceURL:  env("FLEET_COMMUNITY_SCREENCONNECT_URL"),
+			AccessSecret: env("FLEET_COMMUNITY_SCREENCONNECT_ACCESS_SECRET"),
+			APIPath:      env("FLEET_COMMUNITY_SCREENCONNECT_API_PATH"),
+			InstanceID:   env("FLEET_COMMUNITY_SCREENCONNECT_INSTANCE_ID"),
+		},
+		Splashtop: splashtop.Config{
+			BaseURL:       env("FLEET_COMMUNITY_SPLASHTOP_BASE_URL"),
+			APIKey:        env("FLEET_COMMUNITY_SPLASHTOP_API_KEY"),
+			ComputersPath: env("FLEET_COMMUNITY_SPLASHTOP_COMPUTERS_PATH"),
+		},
+		Bitdefender: bitdefender.Config{
+			Host:   env("FLEET_COMMUNITY_BITDEFENDER_HOST"),
+			APIKey: env("FLEET_COMMUNITY_BITDEFENDER_API_KEY"),
+		},
+		Action1: action1.Config{
+			BaseURL:         env("FLEET_COMMUNITY_ACTION1_BASE_URL"),
+			ClientID:        env("FLEET_COMMUNITY_ACTION1_CLIENT_ID"),
+			ClientSecret:    env("FLEET_COMMUNITY_ACTION1_CLIENT_SECRET"),
+			OrgID:           env("FLEET_COMMUNITY_ACTION1_ORG_ID"),
+			AgentDownloadID: env("FLEET_COMMUNITY_ACTION1_AGENT_DOWNLOAD_ID"),
+		},
+	}
+	configured := cfg.ScreenConnect.InstanceURL != "" ||
+		cfg.Splashtop.APIKey != "" ||
+		(cfg.Bitdefender.Host != "" && cfg.Bitdefender.APIKey != "") ||
+		(cfg.Action1.ClientID != "" && cfg.Action1.ClientSecret != "")
+	return cfg, configured
+}
+
+// newCommunityHostStatusSchedule builds the fork-only community host-status collector schedule: it registers
+// the configured providers and runs community.Runner.Run every 5 minutes to upsert host_integration_status
+// coverage cells (updated_at is bumped on every successful write, which is what drives the staleness/coverage
+// dashboard). Registration validates provider config — a malformed configured ScreenConnect URL fails loudly
+// here. NOTE: Runner.Run currently logs and swallows per-provider failures; surfacing a failed poll
+// (per-provider health) is the next step in the observability design.
+func newCommunityHostStatusSchedule(
+	ctx context.Context,
+	instanceID string,
+	ds fleet.Datastore,
+	logger *slog.Logger,
+	cfg providers.Config,
+) (*schedule.Schedule, error) {
+	const (
+		name     = string(fleet.CronCommunityHostStatus)
+		interval = 5 * time.Minute
+	)
+	logger = logger.With("cron", name)
+
+	reg := community.NewRegistry()
+	if err := providers.Register(reg, cfg); err != nil {
+		return nil, err
+	}
+	runner := community.NewRunner(reg, ds, logger)
+
+	s := schedule.New(
+		ctx, name, instanceID, interval, ds, ds,
+		schedule.WithLogger(logger),
+		schedule.WithJob("community_host_status", func(ctx context.Context) error {
+			return runner.Run(ctx)
+		}),
+	)
+	return s, nil
 }
 
 func stringSliceToUintSlice(ctx context.Context, s []string, logger *slog.Logger) []uint {
