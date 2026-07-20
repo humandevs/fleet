@@ -43,6 +43,21 @@ set -eux
 echo "@@USERNAME@@ ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/90-fleet-appliance
 chmod 0440 /etc/sudoers.d/90-fleet-appliance
 
+# Harden SSH when a key was provisioned: an admin with NOPASSWD sudo is one guessed SSH password away
+# from root on the box that holds /etc/fleet/fleet.env (DB creds, FLEET_SERVER_PRIVATE_KEY, every vendor
+# API key). If the sshkey directive populated the admin's authorized_keys, disable password + root SSH
+# (the Hyper-V console still has password login for recovery). Password-only appliances (no key supplied,
+# @@SSHKEY_LINE@@ empty) keep password SSH so the operator isn't locked out.
+if [ -s "/home/@@USERNAME@@/.ssh/authorized_keys" ]; then
+  install -d -m 0755 /etc/ssh/sshd_config.d
+  cat > /etc/ssh/sshd_config.d/50-fleet-appliance.conf <<'SSHD'
+# Managed by the Fleet appliance kickstart: an SSH key was provisioned, so require key-based login.
+PasswordAuthentication no
+PermitRootLogin no
+SSHD
+  chmod 0644 /etc/ssh/sshd_config.d/50-fleet-appliance.conf
+fi
+
 install -d -m 0755 /usr/local/sbin
 cat > /usr/local/sbin/fleet-firstboot.sh <<'FIRSTBOOT'
 #!/bin/bash

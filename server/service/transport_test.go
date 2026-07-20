@@ -549,6 +549,48 @@ func TestHostListOptionsFromRequest(t *testing.T) {
 			url:          "/foo?bootstrap_package=installed&macos_bootstrap_package=pending",
 			errorMessage: "Cannot specify both bootstrap_package and macos_bootstrap_package",
 		},
+		"coverage_problems true sets the Problems filter": {
+			url: "/foo?coverage_problems=true",
+			hostListOptions: fleet.HostListOptions{
+				CoverageFilter: fleet.CoverageFilter{Problems: true},
+			},
+		},
+		"coverage_missing parses and trims comma-separated categories": {
+			url: "/foo?coverage_missing=av,%20mdr",
+			hostListOptions: fleet.HostListOptions{
+				CoverageFilter: fleet.CoverageFilter{
+					MissingCategories: []fleet.IntegrationCategory{fleet.IntegrationCategoryAV, fleet.IntegrationCategoryMDR},
+				},
+			},
+		},
+		"coverage_category + coverage_state yields one state predicate": {
+			url: "/foo?coverage_category=av&coverage_state=at_risk",
+			hostListOptions: fleet.HostListOptions{
+				CoverageFilter: fleet.CoverageFilter{
+					StatePredicates: []fleet.CoverageStatePredicate{{Category: fleet.IntegrationCategoryAV, State: fleet.IntegrationStateAtRisk}},
+				},
+			},
+		},
+		"coverage_category without coverage_state is ignored (no partial predicate)": {
+			url:             "/foo?coverage_category=av",
+			hostListOptions: fleet.HostListOptions{},
+		},
+		"error on non-bool coverage_problems": {
+			url:          "/foo?coverage_problems=notabool",
+			errorMessage: "Invalid coverage_problems",
+		},
+		"error on unknown coverage_missing category (typo / DoS guard)": {
+			url:          "/foo?coverage_missing=av,avv",
+			errorMessage: "Invalid coverage_missing category: avv",
+		},
+		"error on unknown coverage_category": {
+			url:          "/foo?coverage_category=nope&coverage_state=at_risk",
+			errorMessage: "Invalid coverage_category: nope",
+		},
+		"error on unknown coverage_state": {
+			url:          "/foo?coverage_category=av&coverage_state=nope",
+			errorMessage: "Invalid coverage_state: nope",
+		},
 	}
 
 	for name, tt := range hostListOptionsTests {

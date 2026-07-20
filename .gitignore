@@ -136,3 +136,7 @@ custom-gcl
 
 # dibble (the seed slinger) — binary lives next to source
 tools/dibble/dibble
+
+# Human-ISM appliance: decrypted Ansible vault holds fleet_server_private_key + provider API keys.
+# Never commit it (the FLEETSRC tar flow captures the working tree). Use `ansible-vault edit`.
+human/appliance/ansible/group_vars/vault.yml

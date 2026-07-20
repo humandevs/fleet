@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -277,6 +278,11 @@ func (p *Provider) Collect(ctx context.Context) ([]community.HostStatusReport, e
 	return reports, nil
 }
 
+// maxResponseBytes caps how much of the session-list response body we read (32 MB — far above any real
+// session list): a malicious or spoofed RESTful API Manager endpoint must not be able to OOM the
+// collector with an unbounded body.
+const maxResponseBytes = 32 << 20
+
 // getSessions calls the RESTful API Manager session-list method (POST JSON, shared secret in the
 // CTRLAuthHeader header) and returns the parsed sessions.
 func (p *Provider) getSessions(ctx context.Context) ([]apiSession, error) {
@@ -299,8 +305,17 @@ func (p *Provider) getSessions(ctx context.Context) ([]apiSession, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, ctxerr.Errorf(ctx, "screenconnect api status %d", resp.StatusCode)
 	}
+	// Read at most maxResponseBytes+1 so an over-limit body is distinguishable from one exactly at the
+	// limit, and fail loudly rather than decode a truncated list.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "read response body")
+	}
+	if len(body) > maxResponseBytes {
+		return nil, ctxerr.Errorf(ctx, "screenconnect api response exceeds %d bytes", maxResponseBytes)
+	}
 	var sessions []apiSession
-	if err := json.NewDecoder(resp.Body).Decode(&sessions); err != nil {
+	if err := json.Unmarshal(body, &sessions); err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "decode sessions")
 	}
 	return sessions, nil

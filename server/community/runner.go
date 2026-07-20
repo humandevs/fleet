@@ -3,6 +3,7 @@ package community
 import (
 	"context"
 	"log/slog"
+	"strings"
 
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
 	"github.com/fleetdm/fleet/v4/server/fleet"
@@ -41,21 +42,32 @@ func (r *Runner) Run(ctx context.Context) error {
 				"source", p.Source(), "err", err)
 			continue
 		}
-		r.persist(ctx, p.Source(), reports)
+		matched, unmatched := r.persist(ctx, p.Source(), reports)
+		// A systemic mismatch (reports came back but NONE matched a Fleet host) is almost always a
+		// hostname/FQDN convention problem, not "vendor not deployed" — surface it at WARN so it is
+		// visible without DEBUG logging, instead of the whole coverage column silently showing RED.
+		if matched == 0 && unmatched > 0 {
+			r.logger.WarnContext(ctx, "community host-status: no vendor hosts matched a Fleet host (check hostname/FQDN convention)",
+				"source", p.Source(), "unmatched", unmatched)
+		}
 	}
 	return nil
 }
 
-// persist resolves and writes one provider's reports.
-func (r *Runner) persist(ctx context.Context, source string, reports []HostStatusReport) {
+// persist resolves and writes one provider's reports, returning how many reports matched a Fleet host
+// and how many did not. A single upsert failure is logged and does NOT stop the remaining reports.
+func (r *Runner) persist(ctx context.Context, source string, reports []HostStatusReport) (matched, unmatched int) {
 	for _, rep := range reports {
 		host, err := r.resolve(ctx, rep)
 		if err != nil {
-			// Unmatched host is expected (a vendor may cover devices Fleet doesn't enroll) — debug, not warn.
+			// Unmatched host is expected in normal operation (a vendor may cover devices Fleet doesn't
+			// enroll) — debug per-report; the per-run summary in Run flags a total mismatch at WARN.
+			unmatched++
 			r.logger.DebugContext(ctx, "community host-status report did not match a Fleet host",
 				"source", source, "identifier", rep.Identifier, "kind", rep.IdentifierKind, "err", err)
 			continue
 		}
+		matched++
 		cell := &fleet.HostIntegrationStatus{
 			HostID:   host.ID,
 			Source:   source,
@@ -68,6 +80,7 @@ func (r *Runner) persist(ctx context.Context, source string, reports []HostStatu
 				"source", source, "host_id", host.ID, "category", rep.Category, "err", err)
 		}
 	}
+	return matched, unmatched
 }
 
 // resolve maps a report's vendor identifier to a Fleet host.
@@ -79,5 +92,19 @@ func (r *Runner) resolve(ctx context.Context, rep HostStatusReport) (*fleet.Host
 	// hostname / serial / any all use the HostByIdentifier fallback chain (it covers hostname and
 	// hardware_serial), so we don't need vendor-specific lookups for those kinds.
 	host, err := r.ds.HostByIdentifier(ctx, rep.Identifier)
+	if err == nil {
+		return host, nil
+	}
+	// Vendors often report an FQDN ("DESKTOP-01.corp.local") while Fleet stores the short hostname
+	// ("DESKTOP-01"). On a not-found for a dotted identifier, retry with the first DNS label so a whole
+	// fleet's coverage column doesn't silently show never-reported RED. Exact match is tried first, so
+	// this never overrides a real exact hit.
+	if fleet.IsNotFound(err) {
+		if short, _, found := strings.Cut(rep.Identifier, "."); found && short != "" {
+			if h2, err2 := r.ds.HostByIdentifier(ctx, short); err2 == nil {
+				return h2, nil
+			}
+		}
+	}
 	return host, ctxerr.Wrap(ctx, err, "resolve host by identifier")
 }

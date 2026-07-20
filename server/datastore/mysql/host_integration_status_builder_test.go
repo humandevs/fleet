@@ -1,12 +1,30 @@
 package mysql
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/fleetdm/fleet/v4/server/fleet"
 	"github.com/stretchr/testify/require"
 )
+
+// TestCoverageFreshExprDerivedFromTTLs pins the SQL freshness gate to the single source of truth
+// (fleet.IntegrationStaleTTL): every category's WHEN clause must carry that category's exact seconds,
+// and the ELSE must be the default. This makes it impossible for the SQL gate to silently drift from
+// the read-path staleness gate (service applyIntegrationStaleness) — the two used to be hand-kept in
+// sync by a comment. No DB required.
+func TestCoverageFreshExprDerivedFromTTLs(t *testing.T) {
+	expr := buildCoverageFreshExpr()
+	for cat, ttl := range fleet.IntegrationStaleTTL {
+		want := "WHEN '" + string(cat) + "' THEN " + strconv.FormatInt(int64(ttl.Seconds()), 10)
+		require.Contains(t, expr, want, "freshness expr must carry %s's TTL from fleet.IntegrationStaleTTL", cat)
+	}
+	require.Contains(t, expr, "ELSE "+strconv.FormatInt(int64(fleet.DefaultIntegrationStaleTTL.Seconds()), 10))
+	// All six known categories are covered (guards against a category being added to the enum but not
+	// the TTL map, which would silently fall through to the default).
+	require.Len(t, fleet.IntegrationStaleTTL, 6)
+}
 
 // TestCoverageFilterConds exercises the pure coverage-filter SQL builder (no DB required).
 func TestCoverageFilterConds(t *testing.T) {

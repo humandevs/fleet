@@ -2,6 +2,8 @@ package mysql
 
 import (
 	"context"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/fleetdm/fleet/v4/server/contexts/ctxerr"
@@ -9,14 +11,30 @@ import (
 	"github.com/jmoiron/sqlx"
 )
 
-// coverageFreshExpr is a constant SQL boolean that is true when a host_integration_status row `s` is still
-// fresh for its category. TTLs (seconds) mirror the read-path staleness gate (applyIntegrationStaleness):
-// av/mdr 2h, remote_access 1h, backups 36h, disk_encryption/patching 24h, else 2h. A row failing this is
-// stale ⇒ treated as "unknown"/uncovered by the coverage filters, so a stale "protected" never hides a gap.
-const coverageFreshExpr = "s.updated_at > (NOW(6) - INTERVAL (CASE s.category " +
-	"WHEN 'av' THEN 7200 WHEN 'mdr' THEN 7200 WHEN 'remote_access' THEN 3600 " +
-	"WHEN 'backups' THEN 129600 WHEN 'disk_encryption' THEN 86400 WHEN 'patching' THEN 86400 " +
-	"ELSE 7200 END) SECOND)"
+// coverageFreshExpr is a SQL boolean that is true when a host_integration_status row `s` is still fresh
+// for its category. A row failing this is stale ⇒ treated as "unknown"/uncovered by the coverage filters
+// and rollups, so a stale "protected" never hides a gap. It is DERIVED from fleet.IntegrationStaleTTL (the
+// single source of truth), so the SQL freshness gate can never drift from the read-path staleness gate
+// (service applyIntegrationStaleness).
+var coverageFreshExpr = buildCoverageFreshExpr()
+
+// buildCoverageFreshExpr renders the freshness CASE from fleet.IntegrationStaleTTL. The category names
+// are our own enum constants (never user input), so inlining them as SQL literals is safe; categories
+// are sorted so the generated expression is deterministic (stable across builds and testable).
+func buildCoverageFreshExpr() string {
+	cats := make([]string, 0, len(fleet.IntegrationStaleTTL))
+	for c := range fleet.IntegrationStaleTTL {
+		cats = append(cats, string(c))
+	}
+	sort.Strings(cats)
+	expr := "s.updated_at > (NOW(6) - INTERVAL (CASE s.category"
+	for _, c := range cats {
+		secs := int64(fleet.IntegrationStaleTTL[fleet.IntegrationCategory(c)].Seconds())
+		expr += " WHEN '" + c + "' THEN " + strconv.FormatInt(secs, 10)
+	}
+	expr += " ELSE " + strconv.FormatInt(int64(fleet.DefaultIntegrationStaleTTL.Seconds()), 10) + " END) SECOND)"
+	return expr
+}
 
 // coverageFilterConds builds the parameterized WHERE conditions (against a host alias `h`) for a
 // CoverageFilter. All row values are placeholders in args; the only inlined SQL is the constant freshness
@@ -103,27 +121,11 @@ ORDER BY source, category
 	return rows, nil
 }
 
-// ListHostsByCoverage returns the IDs of hosts matching the coverage filter (N-able-style views). Returns
-// nil for a zero filter. It selects IDs only; the endpoint layer hydrates + paginates via the standard
-// host list (see human/RFC-coverage-dashboards-and-bundles.md §6). Not yet on the fleet.Datastore
-// interface — promoted when the host-list endpoint is wired with the frontend.
-func (ds *Datastore) ListHostsByCoverage(ctx context.Context, f fleet.CoverageFilter) ([]uint, error) {
-	conds, args := coverageFilterConds(f)
-	if len(conds) == 0 {
-		return nil, nil
-	}
-	stmt := "SELECT h.id FROM hosts h WHERE " + strings.Join(conds, " AND ") + " ORDER BY h.id"
-	var ids []uint
-	if err := sqlx.SelectContext(ctx, ds.reader(ctx), &ids, stmt, args...); err != nil {
-		return nil, ctxerr.Wrap(ctx, err, "list hosts by coverage")
-	}
-	return ids, nil
-}
-
 // coverageEffectiveStateExpr renders a cell's effective state for rollups: a row past its category
 // TTL counts as "unknown", so dashboard tiles never count stale data as covered (the same invariant
-// as applyIntegrationStaleness and coverageFilterConds).
-const coverageEffectiveStateExpr = "IF(" + coverageFreshExpr + ", s.state, 'unknown')"
+// as applyIntegrationStaleness and coverageFilterConds). Derived from coverageFreshExpr (a var), so it
+// is a var too.
+var coverageEffectiveStateExpr = "IF(" + coverageFreshExpr + ", s.state, 'unknown')"
 
 // buildAggregatedIntegrationStatusStmt assembles the rollup statement from WHERE conditions
 // (against host alias `h`); hoisted so the pure builder test can pin the staleness-aware grouping

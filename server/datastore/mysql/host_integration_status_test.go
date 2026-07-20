@@ -95,33 +95,61 @@ func TestHostIntegrationStatusDB(t *testing.T) {
 		require.Empty(t, agg)
 	})
 
-	t.Run("problem devices includes bad, stale, and never-reported hosts", func(t *testing.T) {
-		// Direct ID filter.
-		ids, err := ds.ListHostsByCoverage(ctx, fleet.CoverageFilter{Problems: true})
+	// listCoverageIDs runs the coverage filter through the standard host-list path (ListHosts) — the
+	// only shipped way to get coverage-filtered hosts — and returns the matched host IDs.
+	listCoverageIDs := func(t *testing.T, cf fleet.CoverageFilter) []uint {
+		t.Helper()
+		hosts, err := ds.ListHosts(ctx, filter, fleet.HostListOptions{CoverageFilter: cf})
 		require.NoError(t, err)
-		require.ElementsMatch(t, []uint{h2.ID, h3.ID, h4.ID}, ids)
-
-		// Through the standard host list (what the UI uses), same result set.
-		opt := fleet.HostListOptions{CoverageFilter: fleet.CoverageFilter{Problems: true}}
-		hosts, err := ds.ListHosts(ctx, filter, opt)
-		require.NoError(t, err)
-		gotIDs := make([]uint, 0, len(hosts))
+		ids := make([]uint, 0, len(hosts))
 		for _, h := range hosts {
-			gotIDs = append(gotIDs, h.ID)
+			ids = append(ids, h.ID)
 		}
-		require.ElementsMatch(t, []uint{h2.ID, h3.ID, h4.ID}, gotIDs)
+		return ids
+	}
 
-		count, err := ds.CountHosts(ctx, filter, opt)
+	t.Run("problem devices includes bad, stale, and never-reported hosts", func(t *testing.T) {
+		cf := fleet.CoverageFilter{Problems: true}
+		require.ElementsMatch(t, []uint{h2.ID, h3.ID, h4.ID}, listCoverageIDs(t, cf))
+
+		// The count endpoint must agree with the list.
+		count, err := ds.CountHosts(ctx, filter, fleet.HostListOptions{CoverageFilter: cf})
 		require.NoError(t, err)
 		require.Equal(t, 3, count)
 	})
 
 	t.Run("missing category filter", func(t *testing.T) {
 		// Hosts lacking a fresh protected av cell: everyone but h1 (h3's av is stale).
-		ids, err := ds.ListHostsByCoverage(ctx, fleet.CoverageFilter{
+		require.ElementsMatch(t, []uint{h2.ID, h3.ID, h4.ID}, listCoverageIDs(t, fleet.CoverageFilter{
 			MissingCategories: []fleet.IntegrationCategory{fleet.IntegrationCategoryAV},
-		})
+		}))
+	})
+
+	t.Run("state predicate filters (exact and unknown-or-stale)", func(t *testing.T) {
+		// Exact (av, at_risk): none of our hosts have a fresh at_risk av cell.
+		require.Empty(t, listCoverageIDs(t, fleet.CoverageFilter{
+			StatePredicates: []fleet.CoverageStatePredicate{{Category: fleet.IntegrationCategoryAV, State: fleet.IntegrationStateAtRisk}},
+		}))
+		// (remote_access, at_risk): h2 has a fresh at_risk remote_access cell.
+		require.ElementsMatch(t, []uint{h2.ID}, listCoverageIDs(t, fleet.CoverageFilter{
+			StatePredicates: []fleet.CoverageStatePredicate{{Category: fleet.IntegrationCategoryRemoteAccess, State: fleet.IntegrationStateAtRisk}},
+		}))
+		// (av, unknown) matches stale-past-TTL: h3's av went stale, so it counts as unknown.
+		require.ElementsMatch(t, []uint{h3.ID}, listCoverageIDs(t, fleet.CoverageFilter{
+			StatePredicates: []fleet.CoverageStatePredicate{{Category: fleet.IntegrationCategoryAV, State: fleet.IntegrationStateUnknown}},
+		}))
+	})
+
+	t.Run("upsert refreshes state and updated_at", func(t *testing.T) {
+		// Re-report h2's remote_access cell as protected; the ON DUPLICATE KEY UPDATE must change the
+		// state AND refresh updated_at (the load-bearing mechanism of the whole staleness model).
+		upsert(h2.ID, fleet.IntegrationCategoryRemoteAccess, fleet.IntegrationStateProtected)
+		rows, err := ds.ListHostIntegrationStatus(ctx, h2.ID)
 		require.NoError(t, err)
-		require.ElementsMatch(t, []uint{h2.ID, h3.ID, h4.ID}, ids)
+		require.Len(t, rows, 1)
+		require.Equal(t, fleet.IntegrationStateProtected, rows[0].State)
+		require.WithinDuration(t, time.Now(), rows[0].UpdatedAt, time.Minute)
+		// h2 now has a fresh protected remote_access cell, so it is no longer a problem device.
+		require.ElementsMatch(t, []uint{h3.ID, h4.ID}, listCoverageIDs(t, fleet.CoverageFilter{Problems: true}))
 	})
 }

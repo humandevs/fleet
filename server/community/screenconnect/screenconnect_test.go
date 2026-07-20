@@ -1,8 +1,10 @@
 package screenconnect
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -75,6 +77,71 @@ func TestCollectMapsSessionsToRemoteAccess(t *testing.T) {
 	require.Equal(t, "DESKTOP-02", reports[1].Identifier)
 	require.Equal(t, fleet.IntegrationStateAtRisk, reports[1].State) // known but offline
 	require.Equal(t, "DESKTOP-03", reports[2].Identifier)            // falls back to GuestMachineName
+}
+
+func TestCollectNon200Errors(t *testing.T) {
+	// A rejected or failing RESTful API Manager call must surface as an error — never as an empty
+	// session list, which the coverage matrix would misread as "no hosts covered".
+	for _, status := range []int{http.StatusUnauthorized, http.StatusInternalServerError} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			defer srv.Close()
+
+			p := New(Config{
+				InstanceURL:  srv.URL,
+				AccessSecret: "s3cr3t",
+				APIPath:      "/App_Extensions/abc/Service.ashx/GetSessionsByFilter",
+			})
+			reports, err := p.Collect(t.Context())
+			require.Error(t, err)
+			require.Contains(t, err.Error(), strconv.Itoa(status))
+			require.Nil(t, reports)
+		})
+	}
+}
+
+func TestCollectMalformedJSONErrors(t *testing.T) {
+	// A body that isn't a session array must error, not silently yield zero reports.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"not":"a session array"`))
+	}))
+	defer srv.Close()
+
+	p := New(Config{
+		InstanceURL:  srv.URL,
+		AccessSecret: "s3cr3t",
+		APIPath:      "/App_Extensions/abc/Service.ashx/GetSessionsByFilter",
+	})
+	reports, err := p.Collect(t.Context())
+	require.Error(t, err)
+	require.Nil(t, reports)
+}
+
+func TestCollectOversizedResponseErrors(t *testing.T) {
+	// A spoofed/malicious server streaming an unbounded body must hit the maxResponseBytes cap and
+	// error, not be buffered without limit. Content is irrelevant — the size check fires before decode.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		chunk := bytes.Repeat([]byte("x"), 1<<20) // 1 MB
+		for written := 0; written <= maxResponseBytes; written += len(chunk) {
+			if _, err := w.Write(chunk); err != nil {
+				return // client stopped reading at the cap
+			}
+		}
+	}))
+	defer srv.Close()
+
+	p := New(Config{
+		InstanceURL:  srv.URL,
+		AccessSecret: "s3cr3t",
+		APIPath:      "/App_Extensions/abc/Service.ashx/GetSessionsByFilter",
+	})
+	reports, err := p.Collect(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeds")
+	require.Nil(t, reports)
 }
 
 func TestCollectNoopWithoutPolling(t *testing.T) {

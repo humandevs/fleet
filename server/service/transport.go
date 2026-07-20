@@ -546,14 +546,27 @@ func hostListOptionsFromRequest(r *http.Request) (fleet.HostListOptions, error) 
 	if missing := r.URL.Query().Get("coverage_missing"); missing != "" {
 		for _, c := range strings.Split(missing, ",") {
 			if c = strings.TrimSpace(c); c != "" {
-				hopt.CoverageFilter.MissingCategories = append(hopt.CoverageFilter.MissingCategories, fleet.IntegrationCategory(c))
+				category := fleet.IntegrationCategory(c)
+				// Reject unknown categories: an unvalidated value is both a silent false-positive (a typo
+				// matches every host) and a query-DoS vector (one correlated NOT-EXISTS subquery per value).
+				if !category.IsValid() {
+					return hopt, ctxerr.Wrap(r.Context(), badRequest(fmt.Sprintf("Invalid coverage_missing category: %s", c)))
+				}
+				hopt.CoverageFilter.MissingCategories = append(hopt.CoverageFilter.MissingCategories, category)
 			}
 		}
 	}
 	if cat, state := r.URL.Query().Get("coverage_category"), r.URL.Query().Get("coverage_state"); cat != "" && state != "" {
+		category, coverageState := fleet.IntegrationCategory(cat), fleet.IntegrationState(state)
+		if !category.IsValid() {
+			return hopt, ctxerr.Wrap(r.Context(), badRequest(fmt.Sprintf("Invalid coverage_category: %s", cat)))
+		}
+		if !coverageState.IsValid() {
+			return hopt, ctxerr.Wrap(r.Context(), badRequest(fmt.Sprintf("Invalid coverage_state: %s", state)))
+		}
 		hopt.CoverageFilter.StatePredicates = append(hopt.CoverageFilter.StatePredicates, fleet.CoverageStatePredicate{
-			Category: fleet.IntegrationCategory(cat),
-			State:    fleet.IntegrationState(state),
+			Category: category,
+			State:    coverageState,
 		})
 	}
 

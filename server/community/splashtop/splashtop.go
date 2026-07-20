@@ -13,6 +13,7 @@
 package splashtop
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -130,25 +131,33 @@ func (p *Provider) listComputers(ctx context.Context) ([]computer, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Try the common wrapped shapes first, then fall back to a bare array.
+	// Dispatch on the top-level JSON shape: only a body that actually starts with '[' is parsed as a bare
+	// array. An object body is decoded as a wrapper and returned even when its list is empty or null —
+	// falling through to the bare-array parse on an empty wrapper would misreport a legitimately empty
+	// tenant as a decode error.
+	if bytes.HasPrefix(bytes.TrimLeft(body, " \t\r\n"), []byte("[")) {
+		var bare []computer
+		if err := json.Unmarshal(body, &bare); err != nil {
+			return nil, ctxerr.Wrap(ctx, err, "decode computers")
+		}
+		return bare, nil
+	}
 	var wrapped struct {
 		Computers []computer `json:"computers"`
 		Items     []computer `json:"items"`
 	}
-	if err := json.Unmarshal(body, &wrapped); err == nil {
-		if len(wrapped.Computers) > 0 {
-			return wrapped.Computers, nil
-		}
-		if len(wrapped.Items) > 0 {
-			return wrapped.Items, nil
-		}
-	}
-	var bare []computer
-	if err := json.Unmarshal(body, &bare); err != nil {
+	if err := json.Unmarshal(body, &wrapped); err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "decode computers")
 	}
-	return bare, nil
+	if wrapped.Computers != nil {
+		return wrapped.Computers, nil
+	}
+	return wrapped.Items, nil
 }
+
+// maxResponseBytes caps how much of a response body we read (32 MB — far above any real computer list): a
+// malicious or spoofed Splashtop endpoint must not be able to OOM the collector with an unbounded body.
+const maxResponseBytes = 32 << 20
 
 // get performs an authenticated GET and returns the raw body (so the caller can try multiple JSON shapes).
 func (p *Provider) get(ctx context.Context, path string) ([]byte, error) {
@@ -169,9 +178,14 @@ func (p *Provider) get(ctx context.Context, path string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, ctxerr.Errorf(ctx, "splashtop GET %s status %d", path, resp.StatusCode)
 	}
-	body, err := io.ReadAll(resp.Body)
+	// Read at most maxResponseBytes+1 so an over-limit body is distinguishable from one exactly at the
+	// limit, and fail loudly rather than decode a truncated list.
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "read response")
+	}
+	if len(body) > maxResponseBytes {
+		return nil, ctxerr.Errorf(ctx, "splashtop GET %s response exceeds %d bytes", path, maxResponseBytes)
 	}
 	return body, nil
 }

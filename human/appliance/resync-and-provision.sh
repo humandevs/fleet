@@ -18,11 +18,19 @@ TARBALL=/tmp/fleet-src.tar.gz
 
 [ -f "$TARBALL" ] || { echo "missing $TARBALL - scp it first" >&2; exit 1; }
 
+# Verify the archive BEFORE touching the existing tree: a truncated/corrupt scp (disk full, aborted
+# transfer) must not half-overwrite /opt/fleet-src and then get reinstalled as "successful".
+echo "== verifying $TARBALL integrity =="
+gzip -t "$TARBALL"
+
 echo "== extracting $TARBALL over $SRC (keeps node_modules/build caches for an incremental build) =="
 mkdir -p "$SRC"
+# rm build/fleet FIRST: the build task is guarded by creates=build/fleet, so a partial extract that
+# leaves the old binary in place would make the playbook skip the build and reinstall stale code. With
+# it gone up front, any extract failure (set -e aborts below) can never masquerade as a good build.
+rm -f "$SRC/build/fleet"
 tar -xzf "$TARBALL" -C "$SRC"
-# rm build/fleet: the build task is guarded by creates=build/fleet; removing it forces a rebuild.
-rm -f "$TARBALL" "$SRC/build/fleet"
+rm -f "$TARBALL"
 
 cd "$SRC"
 # make generate runs 'git clean -fx assets', which needs a git repo; the ISO/tar delivery has none.

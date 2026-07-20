@@ -71,6 +71,10 @@
     owner: "{{ fleet_service_user }}"
     group: "{{ fleet_service_user }}"
     mode: "0640"
+  # no_log: the rendered file holds the DB password, FLEET_SERVER_PRIVATE_KEY, and every provider API
+  # key. Without this, `ansible-playbook --diff` (the natural first debug move) prints them all to the
+  # 0644 provisioning log — negating the 0640 protection on fleet.env itself.
+  no_log: true
   notify: restart fleet
 
 - name: Install systemd unit
@@ -90,6 +94,7 @@
     FLEET_MYSQL_PASSWORD: "{{ fleet_mysql_password }}"
   when: fleet_run_migrations | bool
   changed_when: true
+  no_log: true # environment carries FLEET_MYSQL_PASSWORD
 
 - name: Enable + set service state
   ansible.builtin.systemd:

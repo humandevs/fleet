@@ -9,6 +9,8 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -20,6 +22,19 @@ import (
 )
 
 const defaultPageSize = 100 // GravityZone getEndpointsList perPage max
+
+// maxPages caps how many inventory pages we will follow: the vendor-reported pagesCount is untrusted
+// input, and a malicious or buggy Control Center must not be able to keep the collector paging forever.
+const maxPages = 1000
+
+// maxEndpoints caps the accumulated inventory size (1000 pages × 100 per page) so a spoofed console
+// can't balloon the collector's memory with an unbounded endpoint list.
+const maxEndpoints = 100000
+
+// maxResponseBytes caps how much of a JSON-RPC response body we read (32 MB — far above any real
+// GravityZone reply): a malicious or spoofed Control Center must not be able to OOM the collector with
+// an unbounded body.
+const maxResponseBytes = 32 << 20
 
 // Config is the per-tenant GravityZone configuration. APIKey must be stored envelope-encrypted
 // (human/RISK-REGISTER.md #3), never plaintext.
@@ -38,7 +53,8 @@ type Config struct {
 
 // Provider implements community.HostStatusProvider and community.Collector for Bitdefender GravityZone.
 type Provider struct {
-	cfg Config
+	cfg    Config
+	logger *slog.Logger
 }
 
 // New returns a GravityZone provider.
@@ -46,7 +62,7 @@ func New(cfg Config) *Provider {
 	if cfg.PageSize <= 0 || cfg.PageSize > defaultPageSize {
 		cfg.PageSize = defaultPageSize
 	}
-	return &Provider{cfg: cfg}
+	return &Provider{cfg: cfg, logger: slog.Default()}
 }
 
 // Source implements community.HostStatusProvider.
@@ -73,7 +89,11 @@ func (p *Provider) Collect(ctx context.Context) ([]community.HostStatusReport, e
 	for _, e := range endpoints {
 		det, err := p.endpointDetails(ctx, e.ID)
 		if err != nil {
-			return nil, ctxerr.Wrap(ctx, err, "bitdefender endpoint details")
+			// One bad endpoint must not blank the whole fleet's av/mdr columns — log and move on so the
+			// rest of the sweep still reports.
+			p.logger.WarnContext(ctx, "bitdefender endpoint details failed, skipping endpoint",
+				"endpoint_id", e.ID, "err", err)
+			continue
 		}
 		name := det.Name
 		if name == "" {
@@ -131,8 +151,8 @@ type endpointsPage struct {
 // endpointDetails is the subset of getManagedEndpointDetails we consume. Field names per the setup doc's
 // documented model; parsed defensively (unknown fields ignored).
 type endpointDetails struct {
-	Name    string `json:"name"`
-	Agent   struct {
+	Name  string `json:"name"`
+	Agent struct {
 		ProductOutdated bool `json:"productOutdated"`
 	} `json:"agent"`
 	MalwareStatus struct {
@@ -149,12 +169,21 @@ type endpointDetails struct {
 func (p *Provider) listEndpoints(ctx context.Context) ([]endpoint, error) {
 	var all []endpoint
 	for page := 1; ; page++ {
+		// pagesCount comes from the vendor and is untrusted — cap the loop and the accumulated inventory
+		// rather than paging (and allocating) forever. Erroring beats silently truncating: a partial sweep
+		// reported as complete would flip the missing endpoints' columns to stale/unknown.
+		if page > maxPages {
+			return nil, ctxerr.Errorf(ctx, "gravityzone endpoint inventory exceeds %d pages", maxPages)
+		}
 		var out endpointsPage
 		params := map[string]any{"page": page, "perPage": p.cfg.PageSize}
 		if err := p.call(ctx, "network", "getEndpointsList", params, &out); err != nil {
 			return nil, err
 		}
 		all = append(all, out.Items...)
+		if len(all) > maxEndpoints {
+			return nil, ctxerr.Errorf(ctx, "gravityzone endpoint inventory exceeds %d endpoints", maxEndpoints)
+		}
 		if page >= out.PagesCount || len(out.Items) == 0 {
 			break
 		}
@@ -205,11 +234,20 @@ func (p *Provider) call(ctx context.Context, service, method string, params any,
 	if resp.StatusCode != http.StatusOK {
 		return ctxerr.Errorf(ctx, "gravityzone %s.%s http status %d", service, method, resp.StatusCode)
 	}
+	// Read at most maxResponseBytes+1 so an over-limit body is distinguishable from one exactly at the
+	// limit, and fail loudly rather than decode a truncated envelope.
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes+1))
+	if err != nil {
+		return ctxerr.Wrap(ctx, err, "read response body")
+	}
+	if len(respBody) > maxResponseBytes {
+		return ctxerr.Errorf(ctx, "gravityzone %s.%s response exceeds %d bytes", service, method, maxResponseBytes)
+	}
 	var envelope struct {
 		Result json.RawMessage `json:"result"`
 		Error  *rpcError       `json:"error"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&envelope); err != nil {
+	if err := json.Unmarshal(respBody, &envelope); err != nil {
 		return ctxerr.Wrap(ctx, err, "decode rpc envelope")
 	}
 	if envelope.Error != nil {

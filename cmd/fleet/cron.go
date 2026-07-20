@@ -2179,18 +2179,24 @@ func communityProvidersConfigFromEnv() (providers.Config, bool) {
 			AgentDownloadID: env("FLEET_COMMUNITY_ACTION1_AGENT_DOWNLOAD_ID"),
 		},
 	}
+	// Each provider counts as configured only when it has the MINIMUM creds its Collect actually needs —
+	// otherwise the collector registers but that provider silently no-ops. ScreenConnect needs only the URL
+	// (deployment-only mode is valid; polling additionally needs AccessSecret+APIPath). Action1 needs
+	// OrgID too — action1.Collect returns nothing without it, so ID+secret alone must NOT count as
+	// configured (that shipped a cron that collected nothing with no signal).
 	configured := cfg.ScreenConnect.InstanceURL != "" ||
 		cfg.Splashtop.APIKey != "" ||
 		(cfg.Bitdefender.Host != "" && cfg.Bitdefender.APIKey != "") ||
-		(cfg.Action1.ClientID != "" && cfg.Action1.ClientSecret != "")
+		(cfg.Action1.ClientID != "" && cfg.Action1.ClientSecret != "" && cfg.Action1.OrgID != "")
 	return cfg, configured
 }
 
 // newCommunityHostStatusSchedule builds the fork-only community host-status collector schedule: it registers
 // the configured providers and runs community.Runner.Run every 5 minutes to upsert host_integration_status
 // coverage cells (updated_at is bumped on every successful write, which is what drives the staleness/coverage
-// dashboard). Registration validates provider config — a malformed configured ScreenConnect URL fails loudly
-// here. NOTE: Runner.Run currently logs and swallows per-provider failures; surfacing a failed poll
+// dashboard). Registration validates provider config — a malformed configured ScreenConnect URL returns an
+// error here, which registerMiscCrons logs and skips (the collector is optional and must not abort boot).
+// NOTE: Runner.Run currently logs and swallows per-provider failures; surfacing a failed poll
 // (per-provider health) is the next step in the observability design.
 func newCommunityHostStatusSchedule(
 	ctx context.Context,

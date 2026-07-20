@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -23,7 +24,16 @@ import (
 	"github.com/fleetdm/fleet/v4/server/fleet"
 )
 
-const defaultStaleAfter = 7 * 24 * time.Hour
+const (
+	defaultStaleAfter = 7 * 24 * time.Hour
+	// maxResponseBytes caps how much of a vendor response body we read (io.LimitReader) so a
+	// malicious or spoofed API cannot OOM the collector.
+	maxResponseBytes = 32 << 20 // 32 MB
+	// pageLimit is the per-page item count requested from Action1 list endpoints.
+	pageLimit = 500
+	// maxPages caps pagination so a vendor that keeps returning next_page cannot loop us forever.
+	maxPages = 1000
+)
 
 // Config is the per-tenant Action1 configuration. ClientSecret must be stored envelope-encrypted
 // (human/RISK-REGISTER.md #3), never plaintext.
@@ -141,31 +151,49 @@ type managedEndpoint struct {
 	LastSeen *time.Time `json:"last_seen"`
 }
 
+type missingUpdate struct {
+	EndpointID string `json:"endpoint_id"`
+}
+
 func (p *Provider) managedEndpoints(ctx context.Context) ([]managedEndpoint, error) {
-	var out struct {
-		Items []managedEndpoint `json:"items"`
-	}
-	if err := p.get(ctx, "/endpoints/managed/"+url.PathEscape(p.cfg.OrgID), &out); err != nil {
-		return nil, err
-	}
-	return out.Items, nil
+	return listAll[managedEndpoint](ctx, p, "/endpoints/managed/"+url.PathEscape(p.cfg.OrgID))
 }
 
 // missingUpdateCounts returns a count of missing updates per endpoint id.
 func (p *Provider) missingUpdateCounts(ctx context.Context) (map[string]int, error) {
-	var out struct {
-		Items []struct {
-			EndpointID string `json:"endpoint_id"`
-		} `json:"items"`
-	}
-	if err := p.get(ctx, "/updates/"+url.PathEscape(p.cfg.OrgID), &out); err != nil {
+	items, err := listAll[missingUpdate](ctx, p, "/updates/"+url.PathEscape(p.cfg.OrgID))
+	if err != nil {
 		return nil, err
 	}
-	counts := make(map[string]int, len(out.Items))
-	for _, u := range out.Items {
+	counts := make(map[string]int, len(items))
+	for _, u := range items {
 		counts[u.EndpointID]++
 	}
 	return counts, nil
+}
+
+// listAll pages through an Action1 list endpoint with from/limit offset paging, following the
+// response's next_page cursor until the org is exhausted (capped at maxPages). A single unpaged
+// read silently truncates orgs past the API page size, reporting false-green patching cells for
+// hosts on later pages.
+func listAll[T any](ctx context.Context, p *Provider, path string) ([]T, error) {
+	var all []T
+	from := 0
+	for page := 0; page < maxPages; page++ {
+		var out struct {
+			Items    []T    `json:"items"`
+			NextPage string `json:"next_page"`
+		}
+		if err := p.get(ctx, fmt.Sprintf("%s?from=%d&limit=%d", path, from, pageLimit), &out); err != nil {
+			return nil, err
+		}
+		all = append(all, out.Items...)
+		if out.NextPage == "" || len(out.Items) == 0 {
+			return all, nil
+		}
+		from += len(out.Items)
+	}
+	return nil, ctxerr.Errorf(ctx, "action1 GET %s not exhausted after %d pages", path, maxPages)
 }
 
 // get performs an authenticated GET and decodes the JSON body into out.
@@ -190,8 +218,14 @@ func (p *Provider) get(ctx context.Context, path string, out any) error {
 	if resp.StatusCode != http.StatusOK {
 		return ctxerr.Errorf(ctx, "action1 GET %s status %d", path, resp.StatusCode)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	// io.LimitReader semantics with one sentinel byte past maxResponseBytes: if the decoder drains
+	// the reader (N reaches 0), the body exceeded the cap.
+	lr := &io.LimitedReader{R: resp.Body, N: maxResponseBytes + 1}
+	if err := json.NewDecoder(lr).Decode(out); err != nil {
 		return ctxerr.Wrap(ctx, err, "decode response")
+	}
+	if lr.N <= 0 {
+		return ctxerr.Errorf(ctx, "action1 GET %s response exceeds %d bytes", path, maxResponseBytes)
 	}
 	return nil
 }
@@ -229,8 +263,12 @@ func (p *Provider) getToken(ctx context.Context) (string, error) {
 		AccessToken string `json:"access_token"`
 		ExpiresIn   int    `json:"expires_in"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&tok); err != nil {
+	lr := &io.LimitedReader{R: resp.Body, N: maxResponseBytes + 1}
+	if err := json.NewDecoder(lr).Decode(&tok); err != nil {
 		return "", ctxerr.Wrap(ctx, err, "decode token")
+	}
+	if lr.N <= 0 {
+		return "", ctxerr.Errorf(ctx, "action1 token response exceeds %d bytes", maxResponseBytes)
 	}
 	if tok.AccessToken == "" {
 		return "", ctxerr.New(ctx, "action1 returned empty access token")

@@ -1,6 +1,7 @@
 package splashtop
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -62,6 +63,67 @@ func TestCollectAcceptsBareArray(t *testing.T) {
 	require.Len(t, reports, 1)
 	require.Equal(t, "HOST-A", reports[0].Identifier)
 	require.Equal(t, fleet.IntegrationStateProtected, reports[0].State)
+}
+
+func TestCollectEmptyComputersList(t *testing.T) {
+	// A wrapper that decodes successfully but carries an empty (or null, or absent) list is a legitimate
+	// empty tenant — zero reports, no error. It must NOT fall through to a bare-array parse of the object,
+	// which would misreport it as a decode error.
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"empty computers", `{"computers":[]}`},
+		{"null computers", `{"computers":null}`},
+		{"empty items", `{"items":[]}`},
+		{"empty object", `{}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer srv.Close()
+
+			reports, err := New(Config{BaseURL: srv.URL, APIKey: "k"}).Collect(t.Context())
+			require.NoError(t, err)
+			require.Empty(t, reports)
+		})
+	}
+}
+
+func TestCollectAcceptsItemsWrapper(t *testing.T) {
+	// Some plans/versions wrap the list as {"items":[...]} instead of {"computers":[...]} — both must parse.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[{"id":"1","name":"HOST-B","online":false}]}`))
+	}))
+	defer srv.Close()
+
+	reports, err := New(Config{BaseURL: srv.URL, APIKey: "k"}).Collect(t.Context())
+	require.NoError(t, err)
+	require.Len(t, reports, 1)
+	require.Equal(t, "HOST-B", reports[0].Identifier)
+	require.Equal(t, fleet.IntegrationStateAtRisk, reports[0].State) // known but offline
+}
+
+func TestCollectOversizedResponseErrors(t *testing.T) {
+	// A spoofed/malicious server streaming an unbounded body must hit the maxResponseBytes cap and
+	// error, not be buffered without limit. Content is irrelevant — the size check fires before decode.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		chunk := bytes.Repeat([]byte("x"), 1<<20) // 1 MB
+		for written := 0; written <= maxResponseBytes; written += len(chunk) {
+			if _, err := w.Write(chunk); err != nil {
+				return // client stopped reading at the cap
+			}
+		}
+	}))
+	defer srv.Close()
+
+	reports, err := New(Config{BaseURL: srv.URL, APIKey: "k"}).Collect(t.Context())
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeds")
+	require.Nil(t, reports)
 }
 
 func TestCollectNoopWithoutAPIKey(t *testing.T) {

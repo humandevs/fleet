@@ -26,6 +26,47 @@ const (
 	IntegrationStateUnknown      IntegrationState = "unknown"
 )
 
+// IntegrationStaleTTL is the single source of truth for per-category freshness windows: a coverage
+// cell older than its category's TTL is treated as "unknown" (uncovered) EVERYWHERE — the host-detail
+// read path (service applyIntegrationStaleness), the dashboard rollup, and the coverage host filters.
+// The datastore's SQL freshness expression is DERIVED from this map (see mysql.buildCoverageFreshExpr),
+// so the two surfaces can never drift.
+var IntegrationStaleTTL = map[IntegrationCategory]time.Duration{
+	IntegrationCategoryAV:             2 * time.Hour,
+	IntegrationCategoryMDR:            2 * time.Hour,
+	IntegrationCategoryRemoteAccess:   1 * time.Hour,
+	IntegrationCategoryBackups:        36 * time.Hour, // backups typically run daily
+	IntegrationCategoryDiskEncryption: 24 * time.Hour,
+	IntegrationCategoryPatching:       24 * time.Hour,
+}
+
+// DefaultIntegrationStaleTTL is the freshness window for any category not in IntegrationStaleTTL.
+const DefaultIntegrationStaleTTL = 2 * time.Hour
+
+// IsValid reports whether c is one of the known coverage categories. Used to reject unknown
+// category values at the API boundary (a typo like "avv" would otherwise compile to a filter that
+// matches every host, and an unbounded list would let a caller force one correlated subquery per
+// value).
+func (c IntegrationCategory) IsValid() bool {
+	switch c {
+	case IntegrationCategoryAV, IntegrationCategoryMDR, IntegrationCategoryRemoteAccess,
+		IntegrationCategoryBackups, IntegrationCategoryDiskEncryption, IntegrationCategoryPatching:
+		return true
+	default:
+		return false
+	}
+}
+
+// IsValid reports whether s is one of the known coverage states.
+func (s IntegrationState) IsValid() bool {
+	switch s {
+	case IntegrationStateProtected, IntegrationStateAtRisk, IntegrationStateNotInstalled, IntegrationStateUnknown:
+		return true
+	default:
+		return false
+	}
+}
+
 // HostIntegrationStatus is one community-plugin provider's coverage reading for a single host and
 // category. It is a free/MIT feature: providers write these rows on their sync cadence and the host
 // coverage matrix reads them. It does NOT require a premium license, and coexists with the

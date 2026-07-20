@@ -25,10 +25,7 @@ import {
 import { IMunkiIssuesAggregate } from "interfaces/macadmins";
 import { PlatformValueOptions, PolicyResponse } from "utilities/constants";
 import { IHostCertificate } from "interfaces/certificates";
-import {
-  IHostIntegrationStatusResponse,
-  IHostsByCoverageResponse,
-} from "interfaces/integration_status";
+import { IHostIntegrationStatusResponse } from "interfaces/integration_status";
 import { IListOptions } from "interfaces/list_options";
 
 import { ScriptBatchHostCountV1 } from "./scripts";
@@ -582,20 +579,6 @@ export default {
   ): Promise<IHostIntegrationStatusResponse> => {
     const { HOST_INTEGRATION_STATUS } = endpoints;
     return sendRequest("GET", HOST_INTEGRATION_STATUS(hostID));
-  },
-  // getHostsByCoverage returns the host IDs matching a coverage filter view. `coverage` is the URL param
-  // value: "problems" or "missing:<cat>[,<cat>]" (see CoverageFilter). Translated to the endpoint's
-  // problems/missing params here so callers work in the UI's vocabulary.
-  getHostsByCoverage: (coverage: string): Promise<IHostsByCoverageResponse> => {
-    const { HOSTS_COVERAGE } = endpoints;
-    const params: Record<string, string | boolean | undefined> = {};
-    if (coverage === "problems") {
-      params.problems = true;
-    } else if (coverage.startsWith("missing:")) {
-      params.missing = coverage.slice("missing:".length);
-    }
-    const path = `${HOSTS_COVERAGE}?${buildQueryStringFromParams(params)}`;
-    return sendRequest("GET", path);
   },
   refetch: (host: IHost) => {
     const { HOSTS } = endpoints;

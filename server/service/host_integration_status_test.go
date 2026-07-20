@@ -1,38 +1,130 @@
 package service
 
 import (
+	"context"
 	"testing"
 	"time"
 
+	"github.com/fleetdm/fleet/v4/server/contexts/viewer"
 	"github.com/fleetdm/fleet/v4/server/fleet"
+	"github.com/fleetdm/fleet/v4/server/mock"
 	"github.com/stretchr/testify/require"
 )
 
-func TestCoverageFilterFromRequest(t *testing.T) {
-	// problems flag
-	f := coverageFilterFromRequest(&getHostsByCoverageRequest{Problems: true})
-	require.True(t, f.Problems)
-	require.Empty(t, f.MissingCategories)
+// TestHostIntegrationStatusAuthz locks in the double-authorize on the per-host coverage endpoint: the
+// coarse ActionList gate plus a per-host ActionRead on the LOADED host, so a team-scoped user can only
+// read coverage cells for hosts on their own team. A regression that drops the second Authorize would
+// let a team user read any host's AV/MDR/backup coverage — this test would catch it.
+func TestHostIntegrationStatusAuthz(t *testing.T) {
+	ds := new(mock.Store)
+	svc, ctx := newTestService(t, ds, nil, nil)
 
-	// missing categories (comma-separated, trimmed)
-	f = coverageFilterFromRequest(&getHostsByCoverageRequest{Missing: "av, mdr ,patching"})
-	require.ElementsMatch(t,
-		[]fleet.IntegrationCategory{"av", "mdr", "patching"},
-		f.MissingCategories,
-	)
+	teamHost := &fleet.Host{ID: 1, TeamID: new(uint(1))}
+	globalHost := &fleet.Host{ID: 2}
+	ds.AppConfigFunc = func(ctx context.Context) (*fleet.AppConfig, error) { return &fleet.AppConfig{}, nil }
+	ds.HostLiteFunc = func(ctx context.Context, id uint) (*fleet.Host, error) {
+		if id == 1 {
+			return teamHost, nil
+		}
+		return globalHost, nil
+	}
+	ds.ListHostIntegrationStatusFunc = func(ctx context.Context, hostID uint) ([]*fleet.HostIntegrationStatus, error) {
+		return nil, nil
+	}
 
-	// exact predicate needs both category and state
-	f = coverageFilterFromRequest(&getHostsByCoverageRequest{Category: "backups", State: "at_risk"})
-	require.Len(t, f.StatePredicates, 1)
-	require.Equal(t, fleet.IntegrationCategory("backups"), f.StatePredicates[0].Category)
-	require.Equal(t, fleet.IntegrationState("at_risk"), f.StatePredicates[0].State)
+	cases := []struct {
+		name           string
+		user           *fleet.User
+		failTeamHost   bool // reading host id 1 (team 1)
+		failGlobalHost bool // reading host id 2 (no team)
+	}{
+		{"global admin", &fleet.User{GlobalRole: new(fleet.RoleAdmin)}, false, false},
+		{"global observer", &fleet.User{GlobalRole: new(fleet.RoleObserver)}, false, false},
+		{"team 1 observer", &fleet.User{Teams: []fleet.UserTeam{{Team: fleet.Team{ID: 1}, Role: fleet.RoleObserver}}}, false, true},
+		{"team 2 observer", &fleet.User{Teams: []fleet.UserTeam{{Team: fleet.Team{ID: 2}, Role: fleet.RoleObserver}}}, true, true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			uctx := viewer.NewContext(ctx, viewer.Viewer{User: c.user})
+			_, err := svc.HostIntegrationStatus(uctx, 1)
+			checkAuthErr(t, c.failTeamHost, err)
+			_, err = svc.HostIntegrationStatus(uctx, 2)
+			checkAuthErr(t, c.failGlobalHost, err)
+		})
+	}
+}
 
-	// category without state is ignored (no partial predicate)
-	f = coverageFilterFromRequest(&getHostsByCoverageRequest{Category: "backups"})
-	require.Empty(t, f.StatePredicates)
+// TestAggregatedHostIntegrationStatusService pins the summary-endpoint branches that were the July-11
+// security fix: it always passes the VIEWER's team filter to the datastore (never fleet-wide for a
+// team-scoped user), 404s a nonexistent team via TeamLite, skips the TeamLite lookup for team_id 0
+// ("no team"), and errors without a viewer.
+func TestAggregatedHostIntegrationStatusService(t *testing.T) {
+	ds := new(mock.Store)
+	svc, ctx := newTestService(t, ds, nil, nil)
+	ds.AppConfigFunc = func(ctx context.Context) (*fleet.AppConfig, error) { return &fleet.AppConfig{}, nil }
 
-	// empty request → zero filter
-	require.True(t, coverageFilterFromRequest(&getHostsByCoverageRequest{}).IsZero())
+	var gotFilter fleet.TeamFilter
+	var gotTeamID *uint
+	ds.AggregatedHostIntegrationStatusFunc = func(ctx context.Context, filter fleet.TeamFilter, teamID *uint) ([]*fleet.AggregatedIntegrationStatus, error) {
+		gotFilter, gotTeamID = filter, teamID
+		return nil, nil
+	}
+
+	admin := &fleet.User{GlobalRole: new(fleet.RoleAdmin)}
+
+	t.Run("passes the viewer's team filter to the datastore", func(t *testing.T) {
+		ds.TeamLiteFuncInvoked = false
+		uctx := viewer.NewContext(ctx, viewer.Viewer{User: admin})
+		_, err := svc.AggregatedHostIntegrationStatus(uctx, nil)
+		require.NoError(t, err)
+		require.Equal(t, admin, gotFilter.User)
+		require.True(t, gotFilter.IncludeObserver)
+		require.Nil(t, gotTeamID)
+		require.False(t, ds.TeamLiteFuncInvoked, "no team_id → no team lookup")
+	})
+
+	t.Run("team_id 0 (no team) skips the TeamLite lookup", func(t *testing.T) {
+		ds.TeamLiteFuncInvoked = false
+		uctx := viewer.NewContext(ctx, viewer.Viewer{User: admin})
+		_, err := svc.AggregatedHostIntegrationStatus(uctx, new(uint(0)))
+		require.NoError(t, err)
+		require.False(t, ds.TeamLiteFuncInvoked, "team_id=0 means hosts with no team; there is no team to look up")
+		require.NotNil(t, gotTeamID)
+		require.Equal(t, uint(0), *gotTeamID)
+	})
+
+	t.Run("nonexistent team → not-found (404) and no rollup query", func(t *testing.T) {
+		ds.AggregatedHostIntegrationStatusFuncInvoked = false
+		ds.TeamLiteFunc = func(ctx context.Context, id uint) (*fleet.TeamLite, error) {
+			return nil, newNotFoundError()
+		}
+		uctx := viewer.NewContext(ctx, viewer.Viewer{User: admin})
+		_, err := svc.AggregatedHostIntegrationStatus(uctx, new(uint(999)))
+		require.Error(t, err)
+		require.True(t, fleet.IsNotFound(err))
+		require.False(t, ds.AggregatedHostIntegrationStatusFuncInvoked, "must not run the rollup for a bogus team")
+	})
+
+	t.Run("existing team is looked up then rolled up", func(t *testing.T) {
+		ds.TeamLiteFunc = func(ctx context.Context, id uint) (*fleet.TeamLite, error) {
+			return &fleet.TeamLite{ID: id}, nil
+		}
+		uctx := viewer.NewContext(ctx, viewer.Viewer{User: admin})
+		_, err := svc.AggregatedHostIntegrationStatus(uctx, new(uint(5)))
+		require.NoError(t, err)
+		require.True(t, ds.TeamLiteFuncInvoked)
+		require.NotNil(t, gotTeamID)
+		require.Equal(t, uint(5), *gotTeamID)
+	})
+
+	t.Run("no viewer in context → error, no rollup", func(t *testing.T) {
+		// With no viewer the authz gate denies first (forbidden); either way the security property is
+		// that an unauthenticated call never runs the rollup.
+		ds.AggregatedHostIntegrationStatusFuncInvoked = false
+		_, err := svc.AggregatedHostIntegrationStatus(ctx, nil)
+		require.Error(t, err)
+		require.False(t, ds.AggregatedHostIntegrationStatusFuncInvoked)
+	})
 }
 
 func TestApplyIntegrationStaleness(t *testing.T) {

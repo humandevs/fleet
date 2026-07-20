@@ -75,3 +75,96 @@ func TestPatchStateStaleAgent(t *testing.T) {
 	require.Equal(t, fleet.IntegrationStateAtRisk, state)
 	require.Contains(t, detail, "no check-in")
 }
+
+func TestPatchStateNeverReported(t *testing.T) {
+	state, detail := patchState(managedEndpoint{Name: "H"}, 0, defaultStaleAfter)
+	require.Equal(t, fleet.IntegrationStateAtRisk, state)
+	require.Equal(t, "agent never reported", detail)
+}
+
+func TestManagedEndpointsPaginates(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/oauth2/token":
+			_, _ = w.Write([]byte(`{"access_token":"JWT123","expires_in":3600,"token_type":"bearer"}`))
+		case "/endpoints/managed/org-1":
+			switch r.URL.Query().Get("from") {
+			case "0":
+				_, _ = w.Write([]byte(fmt.Sprintf(`{"items":[
+					{"id":"a","name":"HOST-A"},
+					{"id":"b","name":"HOST-B"}
+				],"next_page":"%s/endpoints/managed/org-1?from=2"}`, r.Host)))
+			case "2":
+				_, _ = w.Write([]byte(`{"items":[{"id":"c","name":"HOST-C"}]}`))
+			default:
+				t.Errorf("unexpected from=%q", r.URL.Query().Get("from"))
+			}
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	p := New(Config{BaseURL: srv.URL, ClientID: "cid", ClientSecret: "sec", OrgID: "org-1"})
+	endpoints, err := p.managedEndpoints(t.Context())
+	require.NoError(t, err)
+
+	names := make([]string, 0, len(endpoints))
+	for _, e := range endpoints {
+		names = append(names, e.Name)
+	}
+	require.Equal(t, []string{"HOST-A", "HOST-B", "HOST-C"}, names)
+}
+
+func TestMissingUpdatesPaginates(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/oauth2/token":
+			_, _ = w.Write([]byte(`{"access_token":"JWT123","expires_in":3600,"token_type":"bearer"}`))
+		case "/updates/org-1":
+			switch r.URL.Query().Get("from") {
+			case "0":
+				_, _ = w.Write([]byte(fmt.Sprintf(`{"items":[
+					{"endpoint_id":"a"},
+					{"endpoint_id":"b"}
+				],"next_page":"%s/updates/org-1?from=2"}`, r.Host)))
+			case "2":
+				_, _ = w.Write([]byte(`{"items":[{"endpoint_id":"b"}]}`))
+			default:
+				t.Errorf("unexpected from=%q", r.URL.Query().Get("from"))
+			}
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	p := New(Config{BaseURL: srv.URL, ClientID: "cid", ClientSecret: "sec", OrgID: "org-1"})
+	counts, err := p.missingUpdateCounts(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, map[string]int{"a": 1, "b": 2}, counts)
+}
+
+func TestTokenCachedAcrossCalls(t *testing.T) {
+	tokenMints := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/oauth2/token":
+			tokenMints++
+			_, _ = w.Write([]byte(`{"access_token":"JWT123","expires_in":3600,"token_type":"bearer"}`))
+		case "/endpoints/managed/org-1", "/updates/org-1":
+			require.Equal(t, "Bearer JWT123", r.Header.Get("Authorization"))
+			_, _ = w.Write([]byte(`{"items":[]}`))
+		default:
+			t.Errorf("unexpected path %s", r.URL.Path)
+		}
+	}))
+	defer srv.Close()
+
+	p := New(Config{BaseURL: srv.URL, ClientID: "cid", ClientSecret: "sec", OrgID: "org-1"})
+	for range 2 {
+		_, err := p.Collect(t.Context())
+		require.NoError(t, err)
+	}
+	require.Equal(t, 1, tokenMints, "second Collect must reuse the cached token")
+}
