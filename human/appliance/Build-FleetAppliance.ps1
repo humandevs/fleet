@@ -368,7 +368,9 @@ Write-Host "    (MySQL + Redis) + builds Fleet CE from $Branch + community plugi
 Write-Host ""
 Write-Host ("Admin login:          {0} / {1}" -f $AdminUser, $AdminPassword) -ForegroundColor Green
 Write-Host "Watch the console:   vmconnect.exe localhost $VMName"
-Write-Host "Find IP + connect:    .\Watch-FleetVM.ps1$(if($GenerateSshKey){" -KeyPath $genKey"})"
+# -VMName is REQUIRED here: Watch-FleetVM (and the other helpers) default -VMName to "fleet-prod", so a
+# copy-paste without it watches the wrong VM when more than one appliance exists.
+Write-Host "Find IP + connect:    .\Watch-FleetVM.ps1 -VMName $VMName$(if($GenerateSshKey){" -KeyPath $genKey"})"
 Write-Host "Provision log (SSH):  sudo tail -f /var/log/fleet-firstboot.log"
 Write-Host "Fleet UI when done:   https://<vm-ip>:8080"
 Write-Host ""
