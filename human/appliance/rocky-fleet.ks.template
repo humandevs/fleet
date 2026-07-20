@@ -14,7 +14,10 @@ network --bootproto=dhcp --device=link --activate --hostname=@@HOSTNAME@@
 zerombr
 clearpart --all --initlabel
 autopart --type=lvm
-bootloader --location=mbr
+# quiet + low loglevel: keep kernel/systemd journal OFF the console (tty1) so the /etc/issue status
+# banner (IP + Fleet status + URL) stays readable instead of being scrolled away by "Starting/Finished
+# X" spam during the long provisioning build. Warnings/errors still print; full detail is in journalctl.
+bootloader --location=mbr --append="quiet loglevel=3"
 
 # Security + accounts. The admin user always gets a password (console + optional password SSH). An SSH key
 # is added only if one was supplied (@@SSHKEY_LINE@@ is empty otherwise — see Build-FleetAppliance.ps1).
