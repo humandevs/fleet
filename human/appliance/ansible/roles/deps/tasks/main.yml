@@ -5,6 +5,22 @@
 # what the code expects. Docker runs natively on the Linux VM (the broken thing was Docker Desktop on
 # Windows). The Fleet server itself stays native (systemd) — Fleet's compose only defines deps, not fleet.
 
+# Override ONLY the runtime `mysql` service's passwords, without editing docker-compose.yml (whose
+# &mysql-default-environment anchor is shared with mysql_test/mysql_replica_test — those must keep the
+# root/toor the test harness hardcodes). docker compose auto-merges docker-compose.override.yml, so the
+# subsequent `up` picks it up; the override names only `mysql`, so the test services are untouched.
+- name: Write docker-compose override with per-appliance DB passwords
+  ansible.builtin.copy:
+    dest: "{{ fleet_src_dir }}/docker-compose.override.yml"
+    mode: "0600"
+    content: |
+      services:
+        mysql:
+          environment:
+            MYSQL_ROOT_PASSWORD: "{{ mysql_root_password }}"
+            MYSQL_PASSWORD: "{{ fleet_mysql_password }}"
+  no_log: true
+
 - name: Bring up MySQL + Redis (persistent compose services)
   ansible.builtin.command:
     cmd: docker compose up -d mysql redis

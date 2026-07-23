@@ -21,16 +21,18 @@ fleet_service_user: "fleet"
 
 # --- MySQL + Redis via the repo's docker-compose (self-contained; the `deps` role runs them) ---
 # Fleet is MySQL-only (8.0.36+, NOT MariaDB/Postgres). The compose `mysql` service publishes on
-# 127.0.0.1:3306 with a persistent volume, and auto-creates db `fleet` + user `fleet`/`insecure` + root/toor
-# — so these values are dictated by docker-compose.yml, not chosen here. To split the DB onto a separate box
-# later: drop the `deps` role and point fleet_mysql_address at that host.
+# 127.0.0.1:3306 with a persistent volume. The passwords come from human/secrets/vault.yml
+# (vault_mysql_password / vault_mysql_root_password — random per-appliance, generated at firstboot),
+# falling back to the compose dev defaults so a bare `docker compose up` still works. The `deps` role
+# writes a docker-compose.override.yml so the runtime `mysql` service actually gets these values without
+# touching docker-compose.yml (whose &mysql-default-environment anchor is shared with mysql_test — which
+# MUST stay root/toor for the test harness). NOTE: MySQL only applies a password on the FIRST init of an
+# empty data volume; changing it on an existing box requires resetting the mysql volume.
 fleet_mysql_address: "127.0.0.1:3306"
 fleet_mysql_database: "fleet"
 fleet_mysql_username: "fleet"       # compose MYSQL_USER
-fleet_mysql_password: "insecure"    # compose MYSQL_PASSWORD (dev cred, not secret — matches docker-compose.yml)
-# The integration-test harness instead uses the compose `mysql_test` service (root/toor on 3307, its own
-# throwaway DBs). root/toor is the same well-known value in Fleet's public docker-compose.yml.
-mysql_root_password: "toor"
+fleet_mysql_password: "{{ vault_mysql_password | default('insecure') }}"
+mysql_root_password: "{{ vault_mysql_root_password | default('toor') }}"
 
 # --- Redis (runs locally on each VM; ephemeral, not source of truth) ---
 fleet_redis_address: "127.0.0.1:6379"

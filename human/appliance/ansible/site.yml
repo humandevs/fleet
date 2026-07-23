@@ -4,7 +4,9 @@
 - name: Provision Fleet instance
   hosts: fleet
   vars_files:
-    - group_vars/vault.yml
+    # Secrets live in the git-ignored human/secrets/ tree (NOT group_vars) so their criticality is
+    # obvious and they're easy to back up — see human/SECRETS.md. Path is relative to this playbook.
+    - ../../secrets/vault.yml
   roles:
     - common   # base packages, firewalld, Docker, Go + Node toolchain, fork checkout
     - deps      # MySQL 8 + Redis via the repo's docker-compose (self-contained)

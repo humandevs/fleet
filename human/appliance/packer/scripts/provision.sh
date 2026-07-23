@@ -23,9 +23,16 @@ fi
 
 cd "$FLEET_SRC/human/appliance/ansible"
 
-# Throwaway key so the fleet role's template renders; replaced per-clone by the personalize service.
+# Throwaway secrets so the fleet role's templates render; replaced per-clone by the personalize service
+# (which must generate the real private key + DB passwords into human/secrets/vault.yml, same as the
+# kickstart firstboot). Secrets live in the git-ignored human/secrets/ tree — see human/SECRETS.md.
 umask 077
-echo 'fleet_server_private_key: "BAKE-PLACEHOLDER-REPLACED-ON-FIRST-BOOT"' > group_vars/vault.yml
+mkdir -p "$FLEET_SRC/human/secrets"
+{
+  echo 'fleet_server_private_key: "BAKE-PLACEHOLDER-REPLACED-ON-FIRST-BOOT"'
+  echo 'vault_mysql_password: "insecure"'
+  echo 'vault_mysql_root_password: "toor"'
+} > "$FLEET_SRC/human/secrets/vault.yml"
 
 ansible-galaxy collection install -r requirements.yml
 ansible-playbook -i inventory/localhost.ini site.yml

@@ -49,10 +49,11 @@ $EDITOR inventory/hosts.ini
 # 2. Non-secret vars: fork URL/branch (DB creds come from docker-compose)
 $EDITOR group_vars/all.yml           # fleet_repo_url, fleet_repo_branch, versions
 
-# 3. Secrets: copy the example, fill in, encrypt
-cp group_vars/vault.yml.example group_vars/vault.yml
-$EDITOR group_vars/vault.yml         # fleet_server_private_key (openssl rand -base64 32)
-ansible-vault encrypt group_vars/vault.yml
+# 3. Secrets: live in the git-ignored human/secrets/ tree (NOT group_vars) — see human/SECRETS.md and
+#    BACK THEM UP off-machine. Copy the example, fill in, encrypt:
+cp ../../secrets/vault.yml.example ../../secrets/vault.yml
+$EDITOR ../../secrets/vault.yml       # fleet_server_private_key (openssl rand -base64 32)
+ansible-vault encrypt ../../secrets/vault.yml
 ```
 
 ## 4. Run it

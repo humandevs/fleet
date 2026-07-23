@@ -137,6 +137,10 @@ custom-gcl
 # dibble (the seed slinger) — binary lives next to source
 tools/dibble/dibble
 
-# Human-ISM appliance: decrypted Ansible vault holds fleet_server_private_key + provider API keys.
-# Never commit it (the FLEETSRC tar flow captures the working tree). Use `ansible-vault edit`.
-human/appliance/ansible/group_vars/vault.yml
+# Human-ISM appliance secrets (human/secrets/): the decrypted Ansible vault holds
+# fleet_server_private_key + DB passwords + provider API keys. Never commit it (the FLEETSRC tar flow
+# captures the working tree). vault.yml.example and README.md ARE tracked. See human/SECRETS.md.
+human/secrets/vault.yml
+human/secrets/*-BACKUP.yml
+# Appliance-generated compose override holding the per-appliance DB passwords (deps role).
+docker-compose.override.yml

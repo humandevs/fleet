@@ -374,5 +374,10 @@ Write-Host "Find IP + connect:    .\Watch-FleetVM.ps1 -VMName $VMName$(if($Gener
 Write-Host "Provision log (SSH):  sudo tail -f /var/log/fleet-firstboot.log"
 Write-Host "Fleet UI when done:   https://<vm-ip>:8080"
 Write-Host ""
+Write-Host "!! BACK UP:            on first boot this box generates an IRREPLACEABLE key" -ForegroundColor Yellow
+Write-Host "                      (fleet_server_private_key) + DB passwords into human/secrets/vault.yml." -ForegroundColor Yellow
+Write-Host "                      Lose the key and Fleet can never decrypt its stored secrets. Once it's up," -ForegroundColor Yellow
+Write-Host "                      Watch-FleetVM prints the exact backup command. See human/SECRETS.md." -ForegroundColor Yellow
+Write-Host ""
 Write-Host "NOTE: after install completes you can detach the OEMDRV ISO (contains the kickstart):"
 Write-Host "  Get-VMDvdDrive $VMName | Where-Object Path -eq '$oemIso' | Remove-VMDvdDrive"

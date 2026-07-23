@@ -91,10 +91,23 @@ fi
 
 cd "$FLEET_SRC/human/appliance/ansible"
 
-# Generate this appliance's unique server private key (encrypts secrets at rest) once.
-if [ ! -f group_vars/vault.yml ]; then
+# Generate this appliance's unique secrets once, into the git-ignored human/secrets/ tree (NOT
+# group_vars) so they're obvious and easy to back up. BACK THEM UP off-machine (human/SECRETS.md):
+# losing fleet_server_private_key permanently locks every secret this Fleet encrypts at rest.
+# TODO (per human/SECRETS.md): the build should PROMPT for / hand back these secrets so the operator
+# takes custody; auto-generating here is the interim.
+SECRETS_DIR="$FLEET_SRC/human/secrets"
+if [ ! -f "$SECRETS_DIR/vault.yml" ]; then
   umask 077
-  echo "fleet_server_private_key: \"$(openssl rand -base64 32)\"" > group_vars/vault.yml
+  mkdir -p "$SECRETS_DIR"
+  {
+    echo "fleet_server_private_key: \"$(openssl rand -base64 32)\""
+    # Random DB creds so the box never runs the published fleet/insecure + root/toor dev defaults.
+    # hex (alphanumeric) is safe unquoted in compose ${VAR} and the systemd EnvironmentFile. NOTE:
+    # MySQL applies these only on the FIRST init of an empty data volume.
+    echo "vault_mysql_password: \"$(openssl rand -hex 24)\""
+    echo "vault_mysql_root_password: \"$(openssl rand -hex 24)\""
+  } > "$SECRETS_DIR/vault.yml"
 fi
 
 ansible-galaxy collection install -r requirements.yml

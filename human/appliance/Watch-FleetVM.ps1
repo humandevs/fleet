@@ -61,6 +61,20 @@ while ((Get-Date) -lt $deadline) {
   if (Test-NetConnection $ip -Port 8080 -InformationLevel Quiet -WarningAction SilentlyContinue) {
     Write-Host ""
     Write-Host "Fleet is UP: https://$($ip):8080" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "  ============================================================" -ForegroundColor Yellow
+    Write-Host "  !!  BACK UP YOUR SECRETS NOW" -ForegroundColor Yellow
+    Write-Host "  ------------------------------------------------------------" -ForegroundColor Yellow
+    Write-Host "  This appliance just generated an IRREPLACEABLE key" -ForegroundColor Yellow
+    Write-Host "  (fleet_server_private_key) plus its DB passwords. Lose the" -ForegroundColor Yellow
+    Write-Host "  key and Fleet can NEVER decrypt what it stored (MDM +" -ForegroundColor Yellow
+    Write-Host "  integration secrets). See human/SECRETS.md." -ForegroundColor Yellow
+    Write-Host "  ------------------------------------------------------------" -ForegroundColor Yellow
+    $sshArgs = if ($KeyPath) { "-i `"$KeyPath`" " } else { "" }
+    Write-Host "  1) Copy the vault off the VM (it's root-owned, so sudo cat):" -ForegroundColor Yellow
+    Write-Host "       ssh $sshArgs$User@$ip 'sudo cat /opt/fleet-src/human/secrets/vault.yml' > $VMName-vault-BACKUP.yml"
+    Write-Host "  2) Put fleet_server_private_key into your password manager (OFF this machine)." -ForegroundColor Yellow
+    Write-Host "  ============================================================" -ForegroundColor Yellow
     return
   }
   Write-Host "." -NoNewline; Start-Sleep 10
