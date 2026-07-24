@@ -5,6 +5,7 @@
 package screenconnect
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -54,11 +55,16 @@ type Config struct {
 	// AccessSecret is the RESTful API Manager shared secret (sent as the CTRLAuthHeader header) used to
 	// poll session/online status. Optional: if empty, Collect is a no-op (deployment-only mode).
 	AccessSecret string
-	// APIPath is the RESTful API Manager service path for the session-list method, relative to InstanceURL
-	// (e.g. "/App_Extensions/<extension-GUID>/Service.ashx/GetSessionsByFilter"). It is instance-specific
-	// (the extension GUID is assigned on install), so it is configured, not hardcoded. Empty ⇒ Collect
-	// no-ops. See human/setup/screenconnect.md.
+	// APIPath is the RESTful API Manager service path for GetSessionsByFilter. The extension GUID is FIXED
+	// (2d558935-686a-4bd0-9991-07539f5fe749 — the same on every install, per the extension docs), so this
+	// defaults (see New) to the standard GetSessionsByFilter path; override only if a future extension
+	// version changes it. See human/setup/screenconnect.md.
 	APIPath string
+	// SessionFilter is the GetSessionsByFilter argument — a ScreenConnect session-filter expression scoping
+	// which sessions to poll, e.g. "CustomProperty1 = 'TestFleet'" (a specific access group) or
+	// "SessionType = 'Access'" (ALL access agents — can be thousands on a busy server). REQUIRED for
+	// polling: the API rejects a null/empty filter, so Collect no-ops when it is empty (deployment-only).
+	SessionFilter string
 	// InstallerName is the base name of the org's access-agent build (the "<Name>" in
 	// /Bin/<Name>.ClientSetup.msi). Defaults to "ScreenConnect".
 	InstallerName string
@@ -121,10 +127,17 @@ type Provider struct {
 	cfg Config
 }
 
+// defaultAPIPath is the RESTful API Manager GetSessionsByFilter service path. The extension GUID is fixed
+// across every instance (per the extension docs), so this works without per-instance configuration.
+const defaultAPIPath = "/App_Extensions/2d558935-686a-4bd0-9991-07539f5fe749/Service.ashx/GetSessionsByFilter"
+
 // New returns a ScreenConnect provider.
 func New(cfg Config) *Provider {
 	if cfg.InstallerName == "" {
 		cfg.InstallerName = "ScreenConnect"
+	}
+	if cfg.APIPath == "" {
+		cfg.APIPath = defaultAPIPath
 	}
 	return &Provider{cfg: cfg}
 }
@@ -228,15 +241,54 @@ func (p *Provider) EnsureSessionGroup(ctx context.Context, client string, sites 
 	return nil
 }
 
-// apiSession is the subset of the ScreenConnect Session Manager object model we consume. Field names
-// follow the documented model (GuestConnectedCount, Name, GuestInfo.MachineName). Parsed defensively —
-// the exact RESTful API Manager response shape is instance/extension-specific (confidence: medium; see
-// human/setup/screenconnect.md), so unknown fields are ignored and missing ones tolerated.
+// apiSession is the subset of the RESTful API Manager GetSessionsByFilter session object we consume.
+// Field names + shapes are from the live response (verified 2026-07-23): the machine name is nested under
+// GuestInfo, and there is NO GuestConnectedCount — current guest connectivity is derived from the last
+// connect/disconnect event times. Parsed defensively; unknown fields are ignored.
 type apiSession struct {
-	SessionID           string `json:"SessionID"`
-	Name                string `json:"Name"`
-	GuestMachineName    string `json:"GuestMachineName"`
-	GuestConnectedCount int    `json:"GuestConnectedCount"`
+	SessionID string `json:"SessionID"`
+	Name      string `json:"Name"`
+	IsEnded   bool   `json:"IsEnded"`
+	GuestInfo struct {
+		MachineName string `json:"MachineName"`
+	} `json:"GuestInfo"`
+	LastGuestConnectedEventTime    scTime `json:"LastGuestConnectedEventTime"`
+	LastGuestDisconnectedEventTime scTime `json:"LastGuestDisconnectedEventTime"`
+}
+
+// scTime parses ScreenConnect's event timestamps. Real values are RFC3339 with fractional seconds and a
+// Z (e.g. "2026-07-19T06:41:52.6169911Z"), but a "never happened" event serializes as the .NET
+// DateTime.MinValue sentinel "0001-01-01T00:00:00" — note: NO timezone, which Go's RFC3339 parser
+// rejects (and would fail the entire decode). We map the sentinel/empty to the zero time.
+type scTime struct{ time.Time }
+
+func (t *scTime) UnmarshalJSON(b []byte) error {
+	s := strings.Trim(string(b), `"`)
+	if s == "" || s == "null" || strings.HasPrefix(s, "0001-01-01") {
+		t.Time = time.Time{}
+		return nil
+	}
+	if parsed, err := time.Parse(time.RFC3339Nano, s); err == nil {
+		t.Time = parsed
+		return nil
+	}
+	// Zone-less fallback (assume UTC) for any value that omits the Z.
+	parsed, err := time.Parse("2006-01-02T15:04:05.999999999", s)
+	if err != nil {
+		return err
+	}
+	t.Time = parsed.UTC()
+	return nil
+}
+
+// guestOnline reports whether the guest (the managed machine's agent) is currently connected: its last
+// connect event is more recent than its last disconnect (or it connected and never disconnected).
+func (s apiSession) guestOnline() bool {
+	if s.LastGuestConnectedEventTime.IsZero() {
+		return false
+	}
+	return s.LastGuestDisconnectedEventTime.IsZero() ||
+		s.LastGuestConnectedEventTime.After(s.LastGuestDisconnectedEventTime.Time)
 }
 
 // Collect implements community.Collector: it polls ScreenConnect for current sessions and maps each to a
@@ -245,8 +297,8 @@ type apiSession struct {
 // nil (no-op) when polling isn't configured (no AccessSecret/APIPath) so a deployment-only instance is
 // valid. It performs no DB access — the community Runner resolves hostnames to hosts and persists.
 func (p *Provider) Collect(ctx context.Context) ([]community.HostStatusReport, error) {
-	if p.cfg.AccessSecret == "" || p.cfg.APIPath == "" {
-		return nil, nil
+	if p.cfg.AccessSecret == "" || p.cfg.SessionFilter == "" {
+		return nil, nil // deployment-only mode (no polling configured)
 	}
 	sessions, err := p.getSessions(ctx)
 	if err != nil {
@@ -254,18 +306,21 @@ func (p *Provider) Collect(ctx context.Context) ([]community.HostStatusReport, e
 	}
 	reports := make([]community.HostStatusReport, 0, len(sessions))
 	for _, s := range sessions {
-		name := s.Name
+		if s.IsEnded {
+			continue // session closed / agent removed — no coverage to report
+		}
+		// The managed machine is GuestInfo.MachineName; fall back to the session Name (we set t=<hostname>
+		// at install, so for our own deploys the Name is the Fleet hostname too).
+		name := s.GuestInfo.MachineName
 		if name == "" {
-			name = s.GuestMachineName
+			name = s.Name
 		}
 		if name == "" {
 			continue // no host key to resolve against
 		}
-		state := fleet.IntegrationStateAtRisk
-		detail := "no guest connected"
-		if s.GuestConnectedCount > 0 {
-			state = fleet.IntegrationStateProtected
-			detail = "guest connected"
+		state, detail := fleet.IntegrationStateAtRisk, "agent offline"
+		if s.guestOnline() {
+			state, detail = fleet.IntegrationStateProtected, "agent online"
 		}
 		reports = append(reports, community.HostStatusReport{
 			Identifier:     name,
@@ -287,9 +342,13 @@ const maxResponseBytes = 32 << 20
 // CTRLAuthHeader header) and returns the parsed sessions.
 func (p *Provider) getSessions(ctx context.Context) ([]apiSession, error) {
 	endpoint := strings.TrimRight(p.cfg.InstanceURL, "/") + p.cfg.APIPath
-	// Empty JSON filter = all sessions; the server groups by custom property, so a bulk call is correct
-	// (see human/setup/screenconnect.md — poll on the order of minutes, one bulk call, not per host).
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader("[]"))
+	// GetSessionsByFilter(string sessionFilter): the one argument is passed as a single-element JSON array.
+	// One bulk call scoped by the filter, on a minutes cadence (see human/setup/screenconnect.md).
+	reqBody, err := json.Marshal([]string{p.cfg.SessionFilter})
+	if err != nil {
+		return nil, ctxerr.Wrap(ctx, err, "encode session filter")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, ctxerr.Wrap(ctx, err, "build request")
 	}

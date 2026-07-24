@@ -2,6 +2,7 @@ package screenconnect
 
 import (
 	"bytes"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -41,42 +42,56 @@ func TestInstallerURLCustomProperties(t *testing.T) {
 }
 
 func TestCollectMapsSessionsToRemoteAccess(t *testing.T) {
-	var gotSecret, gotPath string
+	// Real RESTful API Manager GetSessionsByFilter shape (verified against a live instance 2026-07-23):
+	// machine name nested under GuestInfo, online derived from the last connect/disconnect event times,
+	// ended sessions carry IsEnded.
+	var gotSecret, gotPath, gotBody string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotSecret = r.Header.Get("CTRLAuthHeader")
 		gotPath = r.URL.Path
+		b, _ := io.ReadAll(r.Body)
+		gotBody = string(b)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`[
-			{"SessionID":"g1","Name":"DESKTOP-01","GuestConnectedCount":1},
-			{"SessionID":"g2","Name":"DESKTOP-02","GuestConnectedCount":0},
-			{"SessionID":"g3","GuestMachineName":"DESKTOP-03","GuestConnectedCount":0},
-			{"SessionID":"g4","GuestConnectedCount":1}
+			{"SessionID":"g1","GuestInfo":{"MachineName":"DESKTOP-01"},"LastGuestConnectedEventTime":"2026-01-02T00:00:00Z","LastGuestDisconnectedEventTime":"2026-01-01T00:00:00Z"},
+			{"SessionID":"g2","GuestInfo":{"MachineName":"DESKTOP-02"},"LastGuestConnectedEventTime":"2026-01-01T00:00:00Z","LastGuestDisconnectedEventTime":"2026-01-02T00:00:00Z"},
+			{"SessionID":"g3","Name":"DESKTOP-03"},
+			{"SessionID":"g4","GuestInfo":{"MachineName":"DESKTOP-04"},"IsEnded":true,"LastGuestConnectedEventTime":"2026-01-02T00:00:00Z"},
+			{"SessionID":"g6","GuestInfo":{"MachineName":"DESKTOP-06"},"LastGuestConnectedEventTime":"0001-01-01T00:00:00","LastGuestDisconnectedEventTime":"0001-01-01T00:00:00"},
+			{"SessionID":"g5"}
 		]`))
 	}))
 	defer srv.Close()
 
 	p := New(Config{
-		InstanceURL:  srv.URL,
-		AccessSecret: "s3cr3t",
-		APIPath:      "/App_Extensions/abc/Service.ashx/GetSessionsByFilter",
+		InstanceURL:   srv.URL,
+		AccessSecret:  "s3cr3t",
+		SessionFilter: "CustomProperty1 = 'TestFleet'",
+		// APIPath omitted → defaults to the fixed-GUID GetSessionsByFilter path.
 	})
 	reports, err := p.Collect(t.Context())
 	require.NoError(t, err)
 
 	require.Equal(t, "s3cr3t", gotSecret)
-	require.Equal(t, "/App_Extensions/abc/Service.ashx/GetSessionsByFilter", gotPath)
+	require.Equal(t, defaultAPIPath, gotPath)                       // default fixed-GUID path
+	require.JSONEq(t, `["CustomProperty1 = 'TestFleet'"]`, gotBody) // filter sent as a single-element array
 
-	// g4 has no name/machine-name → dropped (no host key). The other three map by hostname.
-	require.Len(t, reports, 3)
+	// g4 is ended (skipped); g5 has no name (skipped). g1/g2/g3 map by hostname.
+	byName := map[string]community.HostStatusReport{}
 	for _, r := range reports {
 		require.Equal(t, community.IdentifierHostname, r.IdentifierKind)
 		require.Equal(t, fleet.IntegrationCategoryRemoteAccess, r.Category)
+		byName[r.Identifier] = r
 	}
-	require.Equal(t, "DESKTOP-01", reports[0].Identifier)
-	require.Equal(t, fleet.IntegrationStateProtected, reports[0].State) // connected guest
-	require.Equal(t, "DESKTOP-02", reports[1].Identifier)
-	require.Equal(t, fleet.IntegrationStateAtRisk, reports[1].State) // known but offline
-	require.Equal(t, "DESKTOP-03", reports[2].Identifier)            // falls back to GuestMachineName
+	require.Len(t, reports, 4)
+	require.Equal(t, fleet.IntegrationStateProtected, byName["DESKTOP-01"].State) // connect newer than disconnect → online
+	require.Equal(t, fleet.IntegrationStateAtRisk, byName["DESKTOP-02"].State)    // disconnect newer → offline
+	require.Equal(t, fleet.IntegrationStateAtRisk, byName["DESKTOP-03"].State)    // Name fallback, never connected → offline
+	// DESKTOP-06: .NET DateTime.MinValue "0001-01-01T00:00:00" (no timezone) for both times must decode as
+	// "never" (not blow up the whole parse) → offline.
+	require.Equal(t, fleet.IntegrationStateAtRisk, byName["DESKTOP-06"].State)
+	_, endedPresent := byName["DESKTOP-04"]
+	require.False(t, endedPresent, "IsEnded session must be skipped")
 }
 
 func TestCollectNon200Errors(t *testing.T) {
@@ -90,9 +105,9 @@ func TestCollectNon200Errors(t *testing.T) {
 			defer srv.Close()
 
 			p := New(Config{
-				InstanceURL:  srv.URL,
-				AccessSecret: "s3cr3t",
-				APIPath:      "/App_Extensions/abc/Service.ashx/GetSessionsByFilter",
+				InstanceURL:   srv.URL,
+				AccessSecret:  "s3cr3t",
+				SessionFilter: "SessionType = 'Access'",
 			})
 			reports, err := p.Collect(t.Context())
 			require.Error(t, err)
@@ -111,9 +126,9 @@ func TestCollectMalformedJSONErrors(t *testing.T) {
 	defer srv.Close()
 
 	p := New(Config{
-		InstanceURL:  srv.URL,
-		AccessSecret: "s3cr3t",
-		APIPath:      "/App_Extensions/abc/Service.ashx/GetSessionsByFilter",
+		InstanceURL:   srv.URL,
+		AccessSecret:  "s3cr3t",
+		SessionFilter: "SessionType = 'Access'",
 	})
 	reports, err := p.Collect(t.Context())
 	require.Error(t, err)
@@ -134,9 +149,9 @@ func TestCollectOversizedResponseErrors(t *testing.T) {
 	defer srv.Close()
 
 	p := New(Config{
-		InstanceURL:  srv.URL,
-		AccessSecret: "s3cr3t",
-		APIPath:      "/App_Extensions/abc/Service.ashx/GetSessionsByFilter",
+		InstanceURL:   srv.URL,
+		AccessSecret:  "s3cr3t",
+		SessionFilter: "SessionType = 'Access'",
 	})
 	reports, err := p.Collect(t.Context())
 	require.Error(t, err)
@@ -145,8 +160,19 @@ func TestCollectOversizedResponseErrors(t *testing.T) {
 }
 
 func TestCollectNoopWithoutPolling(t *testing.T) {
-	// Deployment-only instance (no API secret/path) is valid: Collect returns nothing, no HTTP call.
+	// Deployment-only instance is valid: Collect returns nothing and makes no HTTP call. Polling needs
+	// BOTH the API secret and a session filter (the API rejects a null filter), so missing either no-ops.
 	reports, err := New(Config{InstanceURL: "https://x"}).Collect(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, reports)
+
+	// Secret set but no filter → still no-op.
+	reports, err = New(Config{InstanceURL: "https://x", AccessSecret: "s"}).Collect(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, reports)
+
+	// Filter set but no secret → still no-op.
+	reports, err = New(Config{InstanceURL: "https://x", SessionFilter: "SessionType = 'Access'"}).Collect(t.Context())
 	require.NoError(t, err)
 	require.Empty(t, reports)
 }

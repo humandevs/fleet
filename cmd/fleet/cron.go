@@ -2157,10 +2157,11 @@ func communityProvidersConfigFromEnv() (providers.Config, bool) {
 	env := os.Getenv
 	cfg := providers.Config{
 		ScreenConnect: screenconnect.Config{
-			InstanceURL:  env("FLEET_COMMUNITY_SCREENCONNECT_URL"),
-			AccessSecret: env("FLEET_COMMUNITY_SCREENCONNECT_ACCESS_SECRET"),
-			APIPath:      env("FLEET_COMMUNITY_SCREENCONNECT_API_PATH"),
-			InstanceID:   env("FLEET_COMMUNITY_SCREENCONNECT_INSTANCE_ID"),
+			InstanceURL:   env("FLEET_COMMUNITY_SCREENCONNECT_URL"),
+			AccessSecret:  env("FLEET_COMMUNITY_SCREENCONNECT_ACCESS_SECRET"),
+			APIPath:       env("FLEET_COMMUNITY_SCREENCONNECT_API_PATH"),
+			SessionFilter: env("FLEET_COMMUNITY_SCREENCONNECT_SESSION_FILTER"),
+			InstanceID:    env("FLEET_COMMUNITY_SCREENCONNECT_INSTANCE_ID"),
 		},
 		Splashtop: splashtop.Config{
 			BaseURL:       env("FLEET_COMMUNITY_SPLASHTOP_BASE_URL"),

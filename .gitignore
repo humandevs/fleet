@@ -144,3 +144,6 @@ human/secrets/vault.yml
 human/secrets/*-BACKUP.yml
 # Appliance-generated compose override holding the per-appliance DB passwords (deps role).
 docker-compose.override.yml
+
+# Cached vendor/extension reference docs (third-party HTML) — keep local, do not commit.
+human/setup/vendor-docs/
