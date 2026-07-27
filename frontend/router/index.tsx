@@ -8,6 +8,7 @@ import {
   browserHistory,
   IndexRedirect,
   IndexRoute,
+  InjectedRouter,
   Route,
   RouteComponent,
   Router,
@@ -59,6 +60,7 @@ import MDMAppleSSOCallbackPage from "pages/MDMAppleSSOCallbackPage";
 import ApiOnlyUser from "pages/ApiOnlyUser";
 import Fleet403 from "pages/errors/Fleet403";
 import Fleet404 from "pages/errors/Fleet404";
+import ErrorPageLayout from "layouts/ErrorPageLayout";
 import AccountPage from "pages/AccountPage";
 import SettingsWrapper from "pages/admin/AdminWrapper";
 import ManageControlsPage from "pages/ManageControlsPage/ManageControlsPage";
@@ -121,6 +123,7 @@ const CustomQueryClientProvider: FC<ICustomQueryClientProviderProps> = QueryClie
 interface IAppWrapperProps {
   children: JSX.Element;
   location?: any;
+  router: InjectedRouter;
 }
 
 const queryClient = new QueryClient();
@@ -128,12 +131,14 @@ const queryClient = new QueryClient();
 // App.tsx needs the context for user and config. We also wrap the application
 // component in the required query client provider for react-query. This
 // will allow us to use react-query hooks in the application component.
-const AppWrapper = ({ children, location }: IAppWrapperProps) => {
+const AppWrapper = ({ children, location, router }: IAppWrapperProps) => {
   return (
     <AppProvider>
       <RoutingProvider>
         <CustomQueryClientProvider client={queryClient}>
-          <App location={location}>{children}</App>
+          <App location={location} router={router}>
+            {children}
+          </App>
         </CustomQueryClientProvider>
       </RoutingProvider>
     </AppProvider>
@@ -142,6 +147,9 @@ const AppWrapper = ({ children, location }: IAppWrapperProps) => {
 
 const routes = (
   <Router history={browserHistory}>
+    {/* Kept outside AppWrapper (and before the "/" route) so the App shell
+    never tries to load a normal session for API-only users. */}
+    <Route path="/apionlyuser" component={ApiOnlyUser} />
     <Route path={PATHS.ROOT} component={AppWrapper}>
       <Route component={UnauthenticatedRoutes as RouteComponent}>
         <Route component={GatedLayout}>
@@ -344,6 +352,7 @@ const routes = (
                   <Route path=":section" component={Scripts} />
                 </Route>
                 <Route path="variables" component={Variables} />
+                <Route path="variables/:section" component={Variables} />
               </Route>
             </Route>
             <Route
@@ -457,11 +466,14 @@ const routes = (
           </Route>
         </Route>
       </Route>
+      {/* Inside AppWrapper so these render through App and can read the
+      authenticated user from AppContext. The catch-all must stay last. */}
+      <Route component={ErrorPageLayout}>
+        <Route path="404" component={Fleet404} />
+        <Route path="403" component={Fleet403} />
+        <Route path="*" component={Fleet404} />
+      </Route>
     </Route>
-    <Route path="/apionlyuser" component={ApiOnlyUser} />
-    <Route path="/404" component={Fleet404} />
-    <Route path="/403" component={Fleet403} />
-    <Route path="*" component={Fleet404} />
   </Router>
 );
 

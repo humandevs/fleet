@@ -162,11 +162,13 @@ const SoftwareFilters = ({
       </div>
 
       <RevealButton
+        className={`${baseClass}__advanced-toggle`}
         isShowing={showAdvanced}
         showText="Advanced options"
         hideText="Advanced options"
         caretPosition="after"
         onClick={() => setShowAdvanced((prev) => !prev)}
+        variant="secondary"
       />
 
       {showAdvanced && (

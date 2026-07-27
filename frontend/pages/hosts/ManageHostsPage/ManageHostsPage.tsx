@@ -48,7 +48,6 @@ import {
 import PATHS from "router/paths";
 import { AppContext } from "context/app";
 import { TableContext } from "context/table";
-import { NotificationContext } from "context/notification";
 
 import useTeamIdParam from "hooks/useTeamIdParam";
 
@@ -81,9 +80,11 @@ import {
   PolicyResponse,
 } from "utilities/constants";
 import { getNextLocationPath } from "utilities/helpers";
+import { getPathWithQueryParams } from "utilities/url";
 import getDeleteLabelErrorMessages from "pages/labels/helpers";
 import { strToBool } from "utilities/strings/stringUtils";
 
+import { notify } from "components/ToastNotification";
 import Button from "components/buttons/Button";
 import Icon from "components/Icon/Icon";
 import { SingleValue } from "react-select-5";
@@ -95,7 +96,7 @@ import { ITableQueryData } from "components/TableContainer/TableContainer";
 import TableCount from "components/TableContainer/TableCount";
 import DataError from "components/DataError";
 import { IActionButtonProps } from "components/TableContainer/DataTable/ActionButton/ActionButton";
-import TeamsDropdown from "components/TeamsDropdown";
+import FleetsDropdown from "components/FleetsDropdown";
 import Spinner from "components/Spinner";
 import MainContent from "components/MainContent";
 import EmptyState from "components/EmptyState";
@@ -171,7 +172,6 @@ const ManageHostsPage = ({
     setFilteredSoftwarePath,
   } = useContext(AppContext);
   const isPrimoMode = config?.partnerships?.enable_primo;
-  const { renderFlash } = useContext(NotificationContext);
 
   const { setResetSelectedRows } = useContext(TableContext);
 
@@ -451,6 +451,9 @@ const ManageHostsPage = ({
   // ========= derived permissions
   // canEnrollHosts is hoisted above the deep-link effects (see earlier)
   const canEnrollGlobalHosts = isGlobalAdmin || isGlobalMaintainer;
+  // Mirrors the Controls > Variables > Custom host vitals tab, which only lets
+  // global admins/maintainers manage vital definitions.
+  const canManageCustomHostVitals = isGlobalAdmin || isGlobalMaintainer;
   const canAddNewLabels =
     (isGlobalAdmin ||
       isGlobalMaintainer ||
@@ -1037,14 +1040,16 @@ const ManageHostsPage = ({
       await usersAPI.update(currentUser.id, {
         settings: { ...userSettings, hidden_host_columns: newHiddenColumns },
       });
-      // No success renderFlash, to make column setting more seamless
+      // No success toast, to make column setting more seamless
       // only set state and close modal if server persist succeeds, keeping UI and server state in
       // sync.
       // Can also add local storage fallback behavior in next iteration if we want.
       setHiddenColumns(newHiddenColumns);
       setShowEditColumnsModal(false);
     } catch (response) {
-      renderFlash("error", "Couldn't save column settings. Please try again.");
+      notify.error("Couldn't save column settings. Please try again.", {
+        response,
+      });
     }
   };
 
@@ -1278,17 +1283,16 @@ const ManageHostsPage = ({
           queryParams,
         })
       );
-      renderFlash(
-        "success",
+      notify.success(
         `Successfully ${selectedSecret ? "edited" : "added"} enroll secret.`
       );
     } catch (error) {
       console.error(error);
-      renderFlash(
-        "error",
+      notify.error(
         `Could not ${
           selectedSecret ? "edit" : "add"
-        } enroll secret. Please try again.`
+        } enroll secret. Please try again.`,
+        { response: error }
       );
     } finally {
       setIsUpdating(false);
@@ -1330,10 +1334,12 @@ const ManageHostsPage = ({
           queryParams,
         })
       );
-      renderFlash("success", `Successfully deleted enroll secret.`);
+      notify.success(`Successfully deleted enroll secret.`);
     } catch (error) {
       console.error(error);
-      renderFlash("error", "Could not delete enroll secret. Please try again.");
+      notify.error("Could not delete enroll secret. Please try again.", {
+        response: error,
+      });
     } finally {
       setIsUpdating(false);
     }
@@ -1360,9 +1366,9 @@ const ManageHostsPage = ({
           queryParams,
         })
       );
-      renderFlash("success", "Successfully deleted label.");
+      notify.success("Successfully deleted label.");
     } catch (error) {
-      renderFlash("error", getDeleteLabelErrorMessages(error));
+      notify.error(getDeleteLabelErrorMessages(error), { response: error });
     } finally {
       setIsUpdating(false);
     }
@@ -1427,14 +1433,16 @@ const ManageHostsPage = ({
           ? `Hosts successfully removed from fleets.`
           : `Hosts successfully transferred to  ${transferTeam.name}.`;
 
-      renderFlash("success", successMessage);
+      notify.success(successMessage);
       setResetSelectedRows(true);
       refetchHosts();
       toggleTransferHostModal();
       setSelectedHostIds([]);
       setIsAllMatchingHostsSelected(false);
     } catch (error) {
-      renderFlash("error", "Could not transfer hosts. Please try again.");
+      notify.error("Could not transfer hosts. Please try again.", {
+        response: error,
+      });
     } finally {
       setIsUpdating(false);
     }
@@ -1474,7 +1482,7 @@ const ManageHostsPage = ({
 
       const successMessage = "Hosts successfully deleted.";
 
-      renderFlash("success", successMessage);
+      notify.success(successMessage);
       setResetSelectedRows(true);
       refetchHosts();
       refetchLabels();
@@ -1482,7 +1490,9 @@ const ManageHostsPage = ({
       setSelectedHostIds([]);
       setIsAllMatchingHostsSelected(false);
     } catch (error) {
-      renderFlash("error", "Could not delete hosts. Please try again.");
+      notify.error("Could not delete hosts. Please try again.", {
+        response: error,
+      });
     } finally {
       setIsUpdating(false);
     }
@@ -1593,11 +1603,11 @@ const ManageHostsPage = ({
     if (isPremiumTier && !isPrimoMode && userTeams) {
       if (userTeams.length > 1 || isOnGlobalTeam) {
         return (
-          <TeamsDropdown
-            currentUserTeams={userTeams || []}
-            selectedTeamId={currentTeamId}
+          <FleetsDropdown
+            currentUserFleets={userTeams}
+            selectedFleetId={currentTeamId}
             onChange={onTeamChange}
-            includeNoTeams
+            includeUnassigned
           />
         );
       }
@@ -1706,7 +1716,9 @@ const ManageHostsPage = ({
         FileSaver.saveAs(file);
       } catch (error) {
         console.error(error);
-        renderFlash("error", "Could not export hosts. Please try again.");
+        notify.error("Could not export hosts. Please try again.", {
+          response: error,
+        });
       }
     },
     [
@@ -1745,7 +1757,6 @@ const ManageHostsPage = ({
       depAssignProfileResponse,
       hiddenColumns,
       queryParams.fleet_id,
-      renderFlash,
     ]
   );
 
@@ -1763,26 +1774,9 @@ const ManageHostsPage = ({
   // No hosts enrolled at all, no filters active
   const isTrulyEmpty = maybeEmptyHosts && !includesFilterQueryParam;
 
-  const renderHostCountAndExport = useCallback(() => {
-    return (
-      <>
-        <TableCount name="hosts" count={totalFilteredHostsCount} />
-        {(!!totalFilteredHostsCount || isTrulyEmpty) && (
-          <Button
-            className={`${baseClass}__export-btn`}
-            onClick={onExportHostsResults}
-            variant="inverse"
-            disabled={isTrulyEmpty}
-          >
-            <>
-              Export hosts
-              <Icon name="download" size="small" />
-            </>
-          </Button>
-        )}
-      </>
-    );
-  }, [totalFilteredHostsCount, isTrulyEmpty, onExportHostsResults]);
+  const renderHostCount = useCallback(() => {
+    return <TableCount name="hosts" count={totalFilteredHostsCount} />;
+  }, [totalFilteredHostsCount]);
 
   const renderCustomControls = () => {
     // we filter out the status labels as we dont want to display them in the label
@@ -1794,27 +1788,55 @@ const ManageHostsPage = ({
         : undefined;
 
     return (
-      <div className={`${baseClass}__filter-dropdowns`}>
-        <DropdownWrapper
-          name="status-filter"
-          value={status || mdmEnrollmentStatus || ""}
-          className={`${baseClass}__status-filter`}
-          options={hostSelectStatuses(isPremiumTier || false)}
-          onChange={handleStatusDropdownChange}
-          variant="table-filter"
-          isDisabled={isTrulyEmpty}
-        />
-        <LabelFilterSelect
-          className={`${baseClass}__label-filter-dropdown`}
-          labels={labels ?? []}
-          canAddNewLabels={canAddNewLabels}
-          selectedLabel={selectedDropdownLabel ?? null}
-          onChange={handleLabelChange}
-          onAddLabel={onAddLabelClick}
-          isLoading={isLoadingLabels}
-          isDisabled={isTrulyEmpty}
-        />
-      </div>
+      <>
+        <div className={`${baseClass}__table-actions`}>
+          {(!!totalFilteredHostsCount || isTrulyEmpty) && (
+            <Button
+              className={`${baseClass}__export-btn`}
+              onClick={onExportHostsResults}
+              variant="secondary"
+              disabled={isTrulyEmpty}
+            >
+              <>
+                <Icon name="download" size="small" />
+                Export hosts
+              </>
+            </Button>
+          )}
+          <Button
+            className={`${baseClass}__edit-columns-btn`}
+            onClick={toggleEditColumnsModal}
+            variant="secondary"
+            disabled={isTrulyEmpty}
+          >
+            <>
+              <Icon name="columns" color="ui-fleet-black-75" />
+              Edit columns
+            </>
+          </Button>
+        </div>
+        <div className={`${baseClass}__filter-dropdowns`}>
+          <DropdownWrapper
+            name="status-filter"
+            value={status || mdmEnrollmentStatus || ""}
+            className={`${baseClass}__status-filter`}
+            options={hostSelectStatuses(isPremiumTier || false)}
+            onChange={handleStatusDropdownChange}
+            variant="table-filter"
+            isDisabled={isTrulyEmpty}
+          />
+          <LabelFilterSelect
+            className={`${baseClass}__label-filter-dropdown`}
+            labels={labels ?? []}
+            canAddNewLabels={canAddNewLabels}
+            selectedLabel={selectedDropdownLabel ?? null}
+            onChange={handleLabelChange}
+            onAddLabel={onAddLabelClick}
+            isLoading={isLoadingLabels}
+            isDisabled={isTrulyEmpty}
+          />
+        </div>
+      </>
     );
   };
 
@@ -1863,9 +1885,8 @@ const ManageHostsPage = ({
         name: "run-script",
         onClick: onClickRunScriptBatchAction,
         buttonText: "Run script",
-        variant: "inverse",
+        variant: "secondary",
         iconSvg: "run",
-        iconStroke: true,
         hideButton: !canRunScriptBatch,
         isDisabled: !!disableRunScriptBatchTooltipContent,
         tooltipContent: disableRunScriptBatchTooltipContent,
@@ -1874,7 +1895,7 @@ const ManageHostsPage = ({
         name: "transfer",
         onClick: onTransferToTeamClick,
         buttonText: "Transfer",
-        variant: "inverse",
+        variant: "secondary",
         iconSvg: "transfer",
         hideButton:
           !isPremiumTier ||
@@ -1979,13 +2000,6 @@ const ManageHostsPage = ({
         pageSize={DEFAULT_PAGE_SIZE}
         additionalQueries={JSON.stringify(selectedLabels)}
         inputPlaceHolder={HOSTS_SEARCH_BOX_PLACEHOLDER}
-        actionButton={{
-          name: "edit columns",
-          buttonText: "Edit columns",
-          iconSvg: "columns",
-          variant: "inverse",
-          onClick: toggleEditColumnsModal,
-        }}
         primarySelectAction={
           // Global technicians cannot delete hosts, so hide the bulk Delete
           // action while still allowing them to select hosts for transfer.
@@ -1995,7 +2009,7 @@ const ManageHostsPage = ({
                 name: "delete host",
                 buttonText: "Delete",
                 iconSvg: "trash",
-                variant: "inverse",
+                variant: "secondary",
                 onClick: onDeleteHostsClick,
               }
         }
@@ -2005,9 +2019,8 @@ const ManageHostsPage = ({
         totalCount={totalFilteredHostsCount}
         searchable
         disableSearch={isTrulyEmpty}
-        renderCount={renderHostCountAndExport}
+        renderCount={renderHostCount}
         searchToolTipText={HOSTS_SEARCH_BOX_TOOLTIP}
-        disableActionButton={isTrulyEmpty}
         emptyComponent={() => (
           <EmptyState
             header={emptyState().header}
@@ -2066,13 +2079,31 @@ const ManageHostsPage = ({
         <div className={`${baseClass}__header-wrap`}>
           {renderHeader()}
           <div className={`${baseClass}__button-wrap`}>
+            {canManageCustomHostVitals && !hasErrors && (
+              <Button
+                onClick={() =>
+                  router.push(
+                    getPathWithQueryParams(
+                      PATHS.CONTROLS_VARIABLES_CUSTOM_HOST_VITALS,
+                      { fleet_id: teamIdForApi }
+                    )
+                  )
+                }
+                className={`${baseClass}__custom-host-vitals`}
+                variant="secondary"
+              >
+                <Icon name="pencil" />
+                <span>Custom host vitals</span>
+              </Button>
+            )}
             {canEnrollHosts && !hasErrors && (
               <Button
                 onClick={() => setShowEnrollSecretModal(true)}
                 className={`${baseClass}__enroll-hosts button`}
-                variant="inverse"
+                variant="secondary"
               >
-                Manage enroll secret
+                <Icon name="settings" />
+                <span>Enroll secrets</span>
               </Button>
             )}
             {showAddHostsButton && (
