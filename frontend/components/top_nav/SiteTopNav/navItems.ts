@@ -57,6 +57,14 @@ export default (
       withParams: { type: "query", names: ["fleet_id"] },
     },
     {
+      name: "Coverage",
+      location: {
+        regex: new RegExp(`^${URL_PREFIX}/coverage`),
+        pathname: PATHS.COVERAGE_GRID,
+      },
+      withParams: { type: "query", names: ["fleet_id"] },
+    },
+    {
       name: "Controls",
       location: {
         regex: new RegExp(`^${URL_PREFIX}/controls/`),

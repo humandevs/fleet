@@ -27,6 +27,7 @@ import ConfirmInvitePage from "pages/ConfirmInvitePage";
 import ConfirmSSOInvitePage from "pages/ConfirmSSOInvitePage";
 import MfaPage from "pages/MfaPage";
 import CoreLayout from "layouts/CoreLayout";
+import CoverageGridPage from "pages/CoverageGridPage";
 import DashboardPage from "pages/DashboardPage";
 import DeviceUserPage from "pages/hosts/details/DeviceUserPage";
 import EditPackPage from "pages/packs/EditPackPage";
@@ -185,6 +186,7 @@ const routes = (
             <Route path="ipados" component={DashboardPage} />
             <Route path="android" component={DashboardPage} />
           </Route>
+          <Route path="coverage" component={CoverageGridPage} />
           <Route path="settings" component={AuthAnyAdminRoutes}>
             <IndexRedirect to="organization/info" />
             <Route component={SettingsWrapper}>

@@ -1,0 +1,32 @@
+.coverage-grid-page {
+  @include vertical-page-layout;
+
+  &__wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: $pad-medium;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+  }
+
+  &__title {
+    font-size: $large;
+
+    h1 {
+      margin: 0;
+    }
+  }
+
+  &__subtitle {
+    margin: 0;
+    color: $ui-fleet-black-50;
+  }
+
+  // CPU / memory is a coarse, not-yet-live metric — the header and its cells are muted.
+  &__muted-header {
+    color: $ui-fleet-black-50;
+  }
+}

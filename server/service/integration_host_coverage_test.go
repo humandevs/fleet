@@ -108,3 +108,46 @@ func (s *integrationTestSuite) TestHostCoverageEndpoints() {
 	// the observer sees nothing for a team they are not on, rather than team2's data.
 	require.Empty(t, summary(http.StatusOK, "team_id", fmt.Sprint(team2.ID)))
 }
+
+// TestHostListPopulateIntegrationStatus verifies the per-host coverage GRID data path: the standard hosts
+// list attaches each host's coverage cells only when populate_integration_status=true, and validates the
+// param. (Staleness of the attached cells reuses the same svc.HostIntegrationStatus path covered by
+// TestApplyIntegrationStaleness and the datastore DB test.)
+func (s *integrationTestSuite) TestHostListPopulateIntegrationStatus() {
+	t := s.T()
+	ctx := context.Background()
+
+	hosts := s.createHosts(t)
+	require.NoError(t, s.ds.SetOrUpdateHostIntegrationStatus(ctx, &fleet.HostIntegrationStatus{
+		HostID: hosts[0].ID, Source: "screenconnect", Category: fleet.IntegrationCategoryRemoteAccess,
+		State: fleet.IntegrationStateProtected, Detail: "agent online",
+	}))
+
+	cellsByHost := func(params ...string) map[uint][]*fleet.HostIntegrationStatus {
+		var resp listHostsResponse
+		s.DoJSON("GET", "/api/latest/fleet/hosts", nil, http.StatusOK, &resp, params...)
+		m := map[uint][]*fleet.HostIntegrationStatus{}
+		for _, h := range resp.Hosts {
+			m[h.ID] = h.IntegrationStatus
+		}
+		return m
+	}
+
+	// Default: coverage cells are NOT attached (omitempty) — the grid opts in explicitly.
+	for id, cells := range cellsByHost() {
+		require.Nil(t, cells, "host %d must have no integration_status without the param", id)
+	}
+
+	// populate_integration_status=true: host[0] carries its cell; a host with no cells gets none.
+	withStatus := cellsByHost("populate_integration_status", "true")
+	require.Len(t, withStatus[hosts[0].ID], 1)
+	cell := withStatus[hosts[0].ID][0]
+	require.Equal(t, "screenconnect", cell.Source)
+	require.Equal(t, fleet.IntegrationCategoryRemoteAccess, cell.Category)
+	require.Equal(t, fleet.IntegrationStateProtected, cell.State)
+	require.Empty(t, withStatus[hosts[1].ID])
+
+	// Invalid boolean is a 400, not a silent no-op.
+	var resp listHostsResponse
+	s.DoJSON("GET", "/api/latest/fleet/hosts", nil, http.StatusBadRequest, &resp, "populate_integration_status", "maybe")
+}

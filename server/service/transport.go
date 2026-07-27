@@ -630,6 +630,17 @@ func hostListOptionsFromRequest(r *http.Request) (fleet.HostListOptions, error) 
 		hopt.PopulateLabels = pl
 	}
 
+	populateIntegrationStatus := r.URL.Query().Get("populate_integration_status")
+	if populateIntegrationStatus != "" {
+		pis, err := strconv.ParseBool(populateIntegrationStatus)
+		if err != nil {
+			return hopt, ctxerr.Wrap(
+				r.Context(), badRequest(fmt.Sprintf("Invalid boolean parameter populate_integration_status: %s", populateIntegrationStatus)),
+			)
+		}
+		hopt.PopulateIntegrationStatus = pis
+	}
+
 	includeDeviceStatus := r.URL.Query().Get("include_device_status")
 	if includeDeviceStatus != "" {
 		ids, err := strconv.ParseBool(includeDeviceStatus)

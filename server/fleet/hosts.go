@@ -269,6 +269,11 @@ type HostListOptions struct {
 	// PopulateLabels adds the `Labels` array field to all host responses returned
 	PopulateLabels bool
 
+	// PopulateIntegrationStatus (fork/community) adds the `integration_status` array (the host's
+	// per-category coverage cells, with staleness applied) to all host responses returned. Powers the
+	// per-host coverage grid dashboard.
+	PopulateIntegrationStatus bool
+
 	// IncludeDeviceStatus adds the `MDM` field with the `device_status` & `pending_action` sub fields to all hosts returned
 	IncludeDeviceStatus bool
 

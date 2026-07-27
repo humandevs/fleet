@@ -370,6 +370,14 @@ func listHostsEndpoint(ctx context.Context, request interface{}, svc fleet.Servi
 					}
 					h.Labels = labels
 				}
+				if req.Opts.PopulateIntegrationStatus {
+					statuses, err := svc.HostIntegrationStatus(ctx, h.ID)
+					if err != nil {
+						yield(nil, ctxerr.Wrap(ctx, err, fmt.Sprintf("failed to list integration status for host %d", h.ID)))
+						return
+					}
+					h.IntegrationStatus = statuses
+				}
 				if !yield(h, nil) {
 					return // consumer wants us to stop
 				}
