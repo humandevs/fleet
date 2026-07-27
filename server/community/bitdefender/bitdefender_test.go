@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -169,4 +170,22 @@ func TestOutdatedAgentIsAtRisk(t *testing.T) {
 	s, detail, _, _ := mapStates(d)
 	require.Equal(t, fleet.IntegrationStateAtRisk, s)
 	require.Equal(t, "agent outdated", detail)
+}
+
+func TestCollectNon200Errors(t *testing.T) {
+	// A non-200 from GravityZone must surface as an error (a wrong region silently 401s — see Config.Host),
+	// never an empty endpoint list the coverage matrix would misread as "no hosts covered".
+	for _, status := range []int{http.StatusUnauthorized, http.StatusInternalServerError} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(status)
+			}))
+			defer srv.Close()
+
+			reports, err := New(Config{Host: srv.URL, APIKey: "k"}).Collect(t.Context())
+			require.Error(t, err)
+			require.Contains(t, err.Error(), strconv.Itoa(status))
+			require.Nil(t, reports)
+		})
+	}
 }

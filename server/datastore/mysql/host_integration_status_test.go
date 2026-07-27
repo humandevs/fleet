@@ -140,7 +140,41 @@ func TestHostIntegrationStatusDB(t *testing.T) {
 		}))
 	})
 
-	t.Run("upsert refreshes state and updated_at", func(t *testing.T) {
+	t.Run("host-list coverage filter is scoped to a team viewer (no cross-tenant leak)", func(t *testing.T) {
+		// A team-1 OBSERVER must only ever see team-1 hosts through the coverage filter. The host-list path
+		// relies entirely on ListHosts' team filter to bound `h`, so this guards against a regression that
+		// correlates the coverage subquery without that bound — the cross-tenant leak class the coverage
+		// audit found. Every host is missing an MDR cell, so admin sees all four but the team-scoped
+		// observer must see ONLY h1 (never the no-team h2/h3/h4).
+		teamObserver := &fleet.User{
+			ID:    424242,
+			Teams: []fleet.UserTeam{{Team: fleet.Team{ID: team.ID}, Role: fleet.RoleObserver}},
+		}
+		scoped := fleet.TeamFilter{User: teamObserver, IncludeObserver: true}
+		missingMDR := fleet.HostListOptions{CoverageFilter: fleet.CoverageFilter{
+			MissingCategories: []fleet.IntegrationCategory{fleet.IntegrationCategoryMDR},
+		}}
+
+		adminHosts, err := ds.ListHosts(ctx, filter, missingMDR)
+		require.NoError(t, err)
+		require.Len(t, adminHosts, 4) // all four hosts lack an MDR cell
+
+		scopedHosts, err := ds.ListHosts(ctx, scoped, missingMDR)
+		require.NoError(t, err)
+		scopedIDs := make([]uint, 0, len(scopedHosts))
+		for _, h := range scopedHosts {
+			scopedIDs = append(scopedIDs, h.ID)
+		}
+		require.Equal(t, []uint{h1.ID}, scopedIDs, "team observer must not see other teams' / no-team hosts")
+	})
+
+	t.Run("upsert refreshes state and updated_at, in isolation", func(t *testing.T) {
+		// Snapshot h1 (fresh av) and h3 (stale av) before touching h2, to prove the upsert is isolated.
+		h1Before, err := ds.ListHostIntegrationStatus(ctx, h1.ID)
+		require.NoError(t, err)
+		h3Before, err := ds.ListHostIntegrationStatus(ctx, h3.ID)
+		require.NoError(t, err)
+
 		// Re-report h2's remote_access cell as protected; the ON DUPLICATE KEY UPDATE must change the
 		// state AND refresh updated_at (the load-bearing mechanism of the whole staleness model).
 		upsert(h2.ID, fleet.IntegrationCategoryRemoteAccess, fleet.IntegrationStateProtected)
@@ -151,5 +185,18 @@ func TestHostIntegrationStatusDB(t *testing.T) {
 		require.WithinDuration(t, time.Now(), rows[0].UpdatedAt, time.Minute)
 		// h2 now has a fresh protected remote_access cell, so it is no longer a problem device.
 		require.ElementsMatch(t, []uint{h3.ID, h4.ID}, listCoverageIDs(t, fleet.CoverageFilter{Problems: true}))
+
+		// Isolation: the h2 upsert touched exactly one (host_id, source, category) row — h1 and h3 are
+		// unchanged (same state, same updated_at), so a regression dropping host_id from the key is caught.
+		h1After, err := ds.ListHostIntegrationStatus(ctx, h1.ID)
+		require.NoError(t, err)
+		h3After, err := ds.ListHostIntegrationStatus(ctx, h3.ID)
+		require.NoError(t, err)
+		require.Len(t, h1After, 1)
+		require.Len(t, h3After, 1)
+		require.Equal(t, h1Before[0].State, h1After[0].State)
+		require.True(t, h1Before[0].UpdatedAt.Equal(h1After[0].UpdatedAt), "h1 updated_at must be unchanged")
+		require.Equal(t, h3Before[0].State, h3After[0].State)
+		require.True(t, h3Before[0].UpdatedAt.Equal(h3After[0].UpdatedAt), "h3 updated_at must be unchanged")
 	})
 }

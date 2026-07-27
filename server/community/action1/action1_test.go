@@ -168,3 +168,55 @@ func TestTokenCachedAcrossCalls(t *testing.T) {
 	}
 	require.Equal(t, 1, tokenMints, "second Collect must reuse the cached token")
 }
+
+func TestCollectNon200Errors(t *testing.T) {
+	// The token call succeeds but the data endpoint fails — Collect must error, never silently report an
+	// empty patch posture the coverage matrix would read as "no hosts covered".
+	for _, status := range []int{http.StatusUnauthorized, http.StatusInternalServerError} {
+		t.Run(fmt.Sprintf("data-%d", status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/oauth2/token" {
+					_, _ = w.Write([]byte(`{"access_token":"JWT","expires_in":3600}`))
+					return
+				}
+				w.WriteHeader(status)
+			}))
+			defer srv.Close()
+
+			reports, err := New(Config{BaseURL: srv.URL, ClientID: "c", ClientSecret: "s", OrgID: "org-1"}).Collect(t.Context())
+			require.Error(t, err)
+			require.Contains(t, err.Error(), fmt.Sprintf("%d", status))
+			require.Nil(t, reports)
+		})
+	}
+}
+
+func TestGetTokenErrors(t *testing.T) {
+	t.Run("token non-200", func(t *testing.T) {
+		// A non-200 from the token endpoint must abort Collect, not proceed with an empty bearer.
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusUnauthorized)
+		}))
+		defer srv.Close()
+
+		reports, err := New(Config{BaseURL: srv.URL, ClientID: "c", ClientSecret: "s", OrgID: "org-1"}).Collect(t.Context())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "401")
+		require.Nil(t, reports)
+	})
+
+	t.Run("empty access token", func(t *testing.T) {
+		// A 200 token response carrying an empty access_token must error — otherwise every downstream call
+		// sends "Authorization: Bearer " and 401s.
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			require.Equal(t, "/oauth2/token", r.URL.Path)
+			_, _ = w.Write([]byte(`{"access_token":"","expires_in":3600}`))
+		}))
+		defer srv.Close()
+
+		reports, err := New(Config{BaseURL: srv.URL, ClientID: "c", ClientSecret: "s", OrgID: "org-1"}).Collect(t.Context())
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "empty access token")
+		require.Nil(t, reports)
+	})
+}

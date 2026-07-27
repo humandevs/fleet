@@ -154,3 +154,21 @@ func TestApplyIntegrationStaleness(t *testing.T) {
 	require.True(t, statuses[3].Stale, "unknown category should use the default TTL")
 	require.Equal(t, fleet.IntegrationStateUnknown, statuses[3].State)
 }
+
+func TestApplyIntegrationStalenessBoundary(t *testing.T) {
+	// The freshness boundary is inclusive-stale (age >= ttl ⇒ stale), matching the SQL coverageFreshExpr
+	// (fresh iff updated_at strictly newer than NOW-ttl) so the host-detail read path and the coverage
+	// filters/rollup can never disagree at the boundary.
+	now := time.Now()
+	ttl := fleet.IntegrationStaleTTL[fleet.IntegrationCategoryAV]
+
+	atBoundary := &fleet.HostIntegrationStatus{Category: fleet.IntegrationCategoryAV, State: fleet.IntegrationStateProtected, UpdatedAt: now.Add(-ttl)}
+	justFresh := &fleet.HostIntegrationStatus{Category: fleet.IntegrationCategoryAV, State: fleet.IntegrationStateProtected, UpdatedAt: now.Add(-ttl + time.Nanosecond)}
+
+	applyIntegrationStaleness([]*fleet.HostIntegrationStatus{atBoundary, justFresh}, now)
+
+	require.True(t, atBoundary.Stale, "age exactly == ttl must be stale (inclusive boundary)")
+	require.Equal(t, fleet.IntegrationStateUnknown, atBoundary.State)
+	require.False(t, justFresh.Stale, "age just under ttl must stay fresh")
+	require.Equal(t, fleet.IntegrationStateProtected, justFresh.State)
+}

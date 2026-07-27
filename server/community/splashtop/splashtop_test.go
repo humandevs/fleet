@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/fleetdm/fleet/v4/server/community"
@@ -137,4 +138,22 @@ func TestDefaultsApplied(t *testing.T) {
 	p := New(Config{APIKey: "k"})
 	require.Equal(t, defaultBaseURL, p.cfg.BaseURL)
 	require.Equal(t, defaultComputersPath, p.cfg.ComputersPath)
+}
+
+func TestCollectNon200Errors(t *testing.T) {
+	// A failing list-computers call must surface as an error, never an empty computer list — which the
+	// coverage matrix would misread as "no hosts covered" (same invariant screenconnect pins).
+	for _, status := range []int{http.StatusUnauthorized, http.StatusInternalServerError} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(status)
+			}))
+			defer srv.Close()
+
+			reports, err := New(Config{BaseURL: srv.URL, APIKey: "k"}).Collect(t.Context())
+			require.Error(t, err)
+			require.Contains(t, err.Error(), strconv.Itoa(status))
+			require.Nil(t, reports)
+		})
+	}
 }

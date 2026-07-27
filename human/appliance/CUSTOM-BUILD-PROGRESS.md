@@ -2,6 +2,10 @@
 
 Status of building **our fork** of Fleet (community plugins, coverage matrix, etc.) into a runnable artifact.
 
+> This doc is about building/running the Fleet **server** appliance. Deploying the fleetd **agent** to a
+> test endpoint (Windows VM enrollment + the mandatory `--enable-scripts` gotcha) lives in
+> [TEST-DEPLOY-FLEETD.md](./TEST-DEPLOY-FLEETD.md).
+
 ## Decision: build once as an image/binary, don't compile per-VM
 
 The first approach - the self-provisioning appliance that compiles Fleet **from source on each VM's first

@@ -119,7 +119,10 @@ func applyIntegrationStaleness(statuses []*fleet.HostIntegrationStatus, now time
 		if t, ok := fleet.IntegrationStaleTTL[s.Category]; ok {
 			ttl = t
 		}
-		if now.Sub(s.UpdatedAt) > ttl {
+		// Inclusive boundary (>=): a cell exactly at its TTL age is stale. This matches the SQL gate
+		// coverageFreshExpr (fresh iff updated_at strictly newer than NOW-ttl ⇒ age == ttl is stale) to the
+		// microsecond, so the host-detail read path and the coverage filters/rollup can never disagree.
+		if now.Sub(s.UpdatedAt) >= ttl {
 			s.Stale = true
 			s.State = fleet.IntegrationStateUnknown
 		}
