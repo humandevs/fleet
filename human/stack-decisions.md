@@ -50,3 +50,61 @@ Two backend frameworks, each with a distinct reason to exist:
 1. **Cross-system device identity** — one canonical device record keyed on stable hardware id (serial + hardware UUID), with a mapping table to Fleet host UUID ↔ OTel `host.id` ↔ Mesh node id ↔ Action1 endpoint id. The backbone; design first.
 2. **MVP subset** — the v1 minimal stack (likely Payload + Drizzle/Postgres + NestJS + Fleet + Action1 + Mesh), deferring Hono/metadata-engine/n8n/Temporal until data shapes demand them.
 3. **Fleet ↔ platform integration contract** — which Fleet API/webhook surfaces the `DeviceEngineProvider` consumes; tenancy (workspace/client → Fleet Teams); token federation.
+
+## OPSI — evaluated and REJECTED as base/complement (2026-07-28)
+
+Code-level evaluation of the locally cloned repos (opsiconfd, opsiclientd, opsi-webgui, opsi-docker,
+opsi-quick-install, uib's `lazarus` monorepo containing opsi-script). Verdict: **Fleet's MIT core stays
+the device engine; OPSI's only role for us is clean-room design reference.**
+
+- **License:** everything is **AGPL-3.0-only** (network copyleft — SaaS does NOT escape, §13), and
+  `opsiclientd/nonfree/` (WAN cache) is all-rights-reserved with **no license grant**, imported by the
+  AGPL agent — the shipped client is a mixed artifact only uib can redistribute. Appliance distribution
+  of (A)GPL code triggers full corresponding-source obligations; in-process addons (their only extension
+  seam) are derivative works. Fleet's MIT core has none of this — that asymmetry is why Fleet is the base.
+- **Paywall targets exactly our sellable surface**, enforced by uib-RSA-signed license files checked in
+  AGPL code: single worker without `scalability1` (opsiconfd/manager.py:85-99), client remote-exec gated
+  on `vpn` (messagebus/websocket.py:102,113), **macOS/Linux agents paid** (macOS agent source not even
+  public), `userroles` paid. Correction to our earlier read: **software/hardware audit (swaudit) is FREE**;
+  so is the full software-distribution stack + PXE netboot + Windows agent + webgui + MySQL backend.
+- **"GPL but paid" is coherent dual-licensing:** uib owns 100% of copyright, so it sells signed unlocks.
+  Their **co-funding→free** model is real (freed modules carry `client_number 999999999` in
+  tests/backend/rpc/test_general.py:379-401). The MODEL (sole copyright + own license gate + co-funding)
+  is worth imitating; the code is not.
+- **Build/ops reality:** core deps (python-opsi/-legacy, opsicommon, configed, bootimage) come only from
+  uib's **private PyPI**; official docker apt-installs prebuilt debs; opsi-script needs Lazarus/FreePascal
+  on three OS-specific runners. Python 3.14 + Pascal + Java + Redis + MariaDB + Samba + TFTP — wrong stack
+  for a Go/TS team.
+- **Patterns to mine (clean-room: from the evaluation notes ONLY — implementing agents never read the
+  OPSI clones):** productOnClient action-request/installationStatus state machine + dependency resolution
+  + per-depot version pinning (desired-state model for our Windows install layer over Fleet's scripts
+  engine); opsi-script's section-based install DSL (declarative sections + imperative escape hatches +
+  server RPC callback incl. license-key pools) as blueprint for our declarative install manifests;
+  event-driven agent lifecycle; free PXE→bootimage→unattended-install flow as prior art for the tabled
+  WIM imaging vision (note: wim-capture and local_imaging are PAID even in OPSI).
+
+**Premium-price concern resolved:** Fleet's $7/host/mo never hits our cost structure — we run Fleet Free;
+premium-gated needs were rebuilt in `server/community/` (coverage matrix/providers/dashboard) or routed
+around (scripts engine, tenancy in the platform). Our marginal Fleet cost per host is $0.
+
+**Android lane (2026-07-28): TinyMDM** (~$2.20/device/mo) confirmed API-fit for the provider pattern:
+MSP manager-key + `X-Account-Id` per tenant, `GET /managers/manageable_accounts`, `GET /devices` maps by
+serial/IMEI with `last_sync_timestamp` staleness + `policy_id` presence as the coverage cell; batch
+lock/wipe/reboot/kiosk; policy-scoped silent app push; QR enrollment. Gaps accepted: no policy CRUD via
+API (console-side templating is a manual onboarding step), static master key (vault, break-glass
+handling), poll-only. **Escape hatch: Google Android Management API — which is FREE with full policy
+CRUD** (TinyMDM is itself an AMAPI console; "Google is pricier" was wrong). Intune rejected (~$8 +
+GDAP/Lighthouse plumbing). ManageEngine rejected (AV/EDR lock-in vs our Huntress+Bitdefender stack).
+
+**Upstream contribution posture (docs-verified):** ADR-0002 only rejects the GitHub-Discussions TOOL for
+internal chats — but the drafted-and-closed gate for product-changing community PRs lives independently
+in handbook/engineering/README.md:137-146 (+ product-groups.md:1150-1154), so a working-code "RFC" mega-PR
+has a documented zero-cost close path and exerts no pressure. No extension ADRs exist (0001-0010 checked);
+no CLA. The modular-monolith doc is Go-server-only and defines contexts by BUSINESS DOMAIN — an
+"Integrations" context fits its Activity reference pattern; "community" (a provenance label) does not,
+and frontend/community has no grounding in it. Play: (a) small non-product PRs (merge directly per
+handbook:131); (b) feature-request issues per capability (their documented intake); (c) optionally ONE
+docs-only ADR PR proposing an "Integrations" bounded context, status Proposed — the only PR-shaped
+proposal vehicle their docs invite; (d) offer our working code only AFTER an issue is prioritized into
+drafting; (e) never touch ee/ (its license assigns Fleet ownership of modifications). Fork-side
+server/community/ + frontend/community seam remains the strategic home regardless.
