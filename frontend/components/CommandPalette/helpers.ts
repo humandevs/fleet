@@ -1,6 +1,7 @@
 import { APP_CONTEXT_ALL_TEAMS_ID, ITeamSummary } from "interfaces/team";
 import { IConfig } from "interfaces/config";
 import paths from "router/paths";
+import buildCommunityItems from "community/palette";
 
 import { deriveContext } from "./groups/derivations";
 import buildPagesItems from "./groups/pages";
@@ -419,6 +420,7 @@ export const buildPaletteItems = (
   const derived = deriveContext(ctx);
   return [
     ...buildPagesItems(ctx, derived),
+    ...buildCommunityItems(ctx), // community (fork) pages — see frontend/community/
     ...buildControlsItems(ctx, derived),
     ...buildSoftwareItems(ctx, derived),
     ...buildSettingsItems(ctx),

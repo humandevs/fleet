@@ -1,10 +1,12 @@
 import { SetupExperiencePlatform } from "interfaces/platform";
+import { communityPaths } from "community/paths";
 import URL_PREFIX from "./url_prefix";
 
 const INTEGRATIONS_PREFIX = `${URL_PREFIX}/settings/integrations`;
 
 // Note: changes to paths.ts should change page_titles.ts respectively
 export default {
+  ...communityPaths, // community (fork) pages — see frontend/community/
   ROOT: `${URL_PREFIX}/`,
 
   // Controls pages
@@ -153,7 +155,6 @@ export default {
 
   LOGIN: `${URL_PREFIX}/login`,
   LOGOUT: `${URL_PREFIX}/logout`,
-  COVERAGE_GRID: `${URL_PREFIX}/coverage`,
   MANAGE_HOSTS: `${URL_PREFIX}/hosts/manage`,
   MANAGE_HOSTS_LABEL: (labelId: number | string): string => {
     return `${URL_PREFIX}/hosts/manage/labels/${labelId}`;

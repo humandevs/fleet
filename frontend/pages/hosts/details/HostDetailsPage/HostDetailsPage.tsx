@@ -18,6 +18,7 @@ import hostAPI, {
   IGetHostCertificatesResponse,
   IGetHostCertsApiParams,
 } from "services/entities/hosts";
+import hostIntegrationStatusAPI from "services/entities/host_integration_status";
 import teamAPI, { ILoadTeamsResponse } from "services/entities/teams";
 import commandAPI from "services/entities/command";
 
@@ -374,7 +375,7 @@ const HostDetailsPage = ({
     isLoading: isLoadingIntegrationStatus,
   } = useQuery(
     ["integrationStatus", hostIdFromURL],
-    () => hostAPI.getIntegrationStatus(hostIdFromURL),
+    () => hostIntegrationStatusAPI.getIntegrationStatus(hostIdFromURL),
     {
       enabled: !!hostIdFromURL,
       retry: false,

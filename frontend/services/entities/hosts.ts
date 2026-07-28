@@ -25,7 +25,6 @@ import {
 import { IMunkiIssuesAggregate } from "interfaces/macadmins";
 import { PlatformValueOptions, PolicyResponse } from "utilities/constants";
 import { IHostCertificate } from "interfaces/certificates";
-import { IHostIntegrationStatusResponse } from "interfaces/integration_status";
 import { IListOptions } from "interfaces/list_options";
 
 import { ScriptBatchHostCountV1 } from "./scripts";
@@ -577,14 +576,6 @@ export default {
     const path = `${HOSTS}/${hostID}/${extension}`;
 
     return sendRequest("GET", path);
-  },
-  // getIntegrationStatus fetches the community-plugin coverage cells for a host (AV/MDR/patching/remote
-  // access/backups/disk encryption). Feeds the host-details Coverage card.
-  getIntegrationStatus: (
-    hostID: number
-  ): Promise<IHostIntegrationStatusResponse> => {
-    const { HOST_INTEGRATION_STATUS } = endpoints;
-    return sendRequest("GET", HOST_INTEGRATION_STATUS(hostID));
   },
   refetch: (host: IHost) => {
     const { HOSTS } = endpoints;

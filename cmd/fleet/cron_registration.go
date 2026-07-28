@@ -354,6 +354,8 @@ func registerPremiumCrons(ctx context.Context, deps cronSchedulesDeps) {
 // registerMiscCrons covers the host vitals label membership schedule and the
 // batch activity completion checker.
 func registerMiscCrons(ctx context.Context, deps cronSchedulesDeps) {
+	registerCommunityCrons(ctx, deps) // community (fork) collector — see cmd/fleet/cron_community.go
+
 	// Start the service that calculates and updates host vitals label membership.
 	deps.register("failed to register host vitals label membership schedule", func() (fleet.CronSchedule, error) {
 		return newHostVitalsLabelMembershipSchedule(ctx, deps.instanceID, deps.ds, deps.logger)
@@ -363,20 +365,4 @@ func registerMiscCrons(ctx context.Context, deps cronSchedulesDeps) {
 	deps.register("failed to register batch activity completion checker schedule", func() (fleet.CronSchedule, error) {
 		return newBatchActivityCompletionCheckerSchedule(ctx, deps.instanceID, deps.ds, deps.logger)
 	})
-
-	// Fork-only: community host-status collector (ScreenConnect/Splashtop/Bitdefender/Action1). Registered
-	// only when at least one FLEET_COMMUNITY_* provider is configured, so stock deployments don't run a
-	// no-op cron.
-	if cfg, ok := communityProvidersConfigFromEnv(); ok {
-		// Optional integration: a misconfigured provider (e.g. a malformed ScreenConnect URL) disables the
-		// coverage collector but must NOT abort server boot the way deps.register/initFatal would for a core
-		// schedule. Fail loudly in the log and keep the server (and every other schedule) running.
-		if err := deps.cronSchedules.StartCronSchedule(func() (fleet.CronSchedule, error) {
-			return newCommunityHostStatusSchedule(ctx, deps.instanceID, deps.ds, deps.logger, cfg)
-		}); err != nil {
-			deps.logger.ErrorContext(ctx, "community host-status collector misconfigured; coverage collection disabled (fix FLEET_COMMUNITY_* env and restart)", "err", err)
-		}
-	} else {
-		deps.logger.InfoContext(ctx, "community host-status collector not configured; skipping (set FLEET_COMMUNITY_* env vars to enable)")
-	}
 }

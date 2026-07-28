@@ -1,6 +1,7 @@
 import PATHS from "router/paths";
 import URL_PREFIX from "router/url_prefix";
 import { IUser } from "interfaces/user";
+import communityNavItems from "community/nav_items";
 
 export interface INavItem {
   name: string;
@@ -56,14 +57,7 @@ export default (
       },
       withParams: { type: "query", names: ["fleet_id"] },
     },
-    {
-      name: "Coverage",
-      location: {
-        regex: new RegExp(`^${URL_PREFIX}/coverage`),
-        pathname: PATHS.COVERAGE_GRID,
-      },
-      withParams: { type: "query", names: ["fleet_id"] },
-    },
+    ...communityNavItems(), // community (fork) pages — see frontend/community/
     {
       name: "Controls",
       location: {

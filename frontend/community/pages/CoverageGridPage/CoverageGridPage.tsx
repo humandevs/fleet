@@ -25,7 +25,7 @@ import MainContent from "components/MainContent";
 import TableContainer from "components/TableContainer";
 import { ITableQueryData } from "components/TableContainer/TableContainer";
 import EmptyState from "components/EmptyState";
-import TeamsDropdown from "components/TeamsDropdown";
+import FleetsDropdown from "components/FleetsDropdown";
 
 import { generateCoverageGridColumns } from "./CoverageGridTableConfig";
 
@@ -161,11 +161,11 @@ const CoverageGridPage = ({
     if (isPremiumTier && !isPrimoMode && userTeams) {
       if (userTeams.length > 1 || isOnGlobalTeam) {
         return (
-          <TeamsDropdown
-            currentUserTeams={userTeams || []}
-            selectedTeamId={currentTeamId}
+          <FleetsDropdown
+            currentUserFleets={userTeams || []}
+            selectedFleetId={currentTeamId}
             onChange={handleTeamChange}
-            includeNoTeams
+            includeUnassigned
           />
         );
       }

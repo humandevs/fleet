@@ -2,11 +2,12 @@
 
 import { DOCUMENT_TITLE_SUFFIX } from "utilities/constants";
 import PATHS from "router/paths";
+import communityPageTitles from "community/page_titles";
 
 // Note: Order matters for use of array.find() (specific subpaths must be listed before their parent path)
 export default [
+  ...communityPageTitles, // community (fork) pages — see frontend/community/
   { path: PATHS.DASHBOARD, title: `Dashboard | ${DOCUMENT_TITLE_SUFFIX}` },
-  { path: PATHS.COVERAGE_GRID, title: `Coverage | ${DOCUMENT_TITLE_SUFFIX}` },
   { path: PATHS.MANAGE_HOSTS, title: `Hosts | ${DOCUMENT_TITLE_SUFFIX}` },
   {
     path: PATHS.CONTROLS,
