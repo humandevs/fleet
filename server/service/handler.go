@@ -563,6 +563,8 @@ func attachFleetAPIRoutes(r *mux.Router, svc fleet.Service, config config.FleetC
 	ue.GET("/api/_version_/fleet/carves/{id:[0-9]+}/block/{block_id}", getCarveBlockEndpoint, fleet.GetCarveBlockRequest{})
 
 	ue.GET("/api/_version_/fleet/hosts/{id:[0-9]+}/macadmins", getMacadminsDataEndpoint, getMacadminsDataRequest{})
+	ue.StartingAtVersion("2022-04").GET("/api/_version_/fleet/hosts/{id:[0-9]+}/integration_status", getHostIntegrationStatusEndpoint, getHostIntegrationStatusRequest{})
+	ue.StartingAtVersion("2022-04").GET("/api/_version_/fleet/host_integration_status/summary", getIntegrationStatusSummaryEndpoint, getIntegrationStatusSummaryRequest{})
 	ue.GET("/api/_version_/fleet/macadmins", getAggregatedMacadminsDataEndpoint, getAggregatedMacadminsDataRequest{})
 
 	ue.GET("/api/_version_/fleet/status/result_store", statusResultStoreEndpoint, nil)

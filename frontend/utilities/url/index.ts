@@ -53,6 +53,7 @@ interface IMutuallyExclusiveHostParams {
   scriptBatchExecutionId?: string;
   depProfileError?: boolean;
   depAssignProfileResponse?: DEPDeviceStatus;
+  coverageProblems?: boolean;
 }
 
 export const parseQueryValueToNumberOrUndefined = (
@@ -229,6 +230,7 @@ export const reconcileMutuallyExclusiveHostParams = ({
   scriptBatchExecutionId,
   depProfileError,
   depAssignProfileResponse,
+  coverageProblems,
 }: IMutuallyExclusiveHostParams): Record<string, unknown> => {
   if (label) {
     // backend api now allows (label + low disk space) OR (label + mdm id) OR
@@ -306,6 +308,8 @@ export const reconcileMutuallyExclusiveHostParams = ({
       return { dep_profile_error: true };
     case !!depAssignProfileResponse:
       return { dep_assign_profile_response: depAssignProfileResponse };
+    case !!coverageProblems:
+      return { [HOSTS_QUERY_PARAMS.COVERAGE_PROBLEMS]: true };
     default:
       return {};
   }

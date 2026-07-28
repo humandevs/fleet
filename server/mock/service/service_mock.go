@@ -274,6 +274,10 @@ type DisableAuthForPingFunc func(ctx context.Context)
 
 type MacadminsDataFunc func(ctx context.Context, id uint) (*fleet.MacadminsData, error)
 
+type HostIntegrationStatusFunc func(ctx context.Context, hostID uint) ([]*fleet.HostIntegrationStatus, error)
+
+type AggregatedHostIntegrationStatusFunc func(ctx context.Context, teamID *uint) ([]*fleet.AggregatedIntegrationStatus, error)
+
 type MDMDataFunc func(ctx context.Context, id uint) (*fleet.HostMDM, error)
 
 type AggregatedMacadminsDataFunc func(ctx context.Context, teamID *uint) (*fleet.AggregatedMacadminsData, error)
@@ -1365,6 +1369,12 @@ type Service struct {
 
 	MacadminsDataFunc        MacadminsDataFunc
 	MacadminsDataFuncInvoked bool
+
+	HostIntegrationStatusFunc        HostIntegrationStatusFunc
+	HostIntegrationStatusFuncInvoked bool
+
+	AggregatedHostIntegrationStatusFunc        AggregatedHostIntegrationStatusFunc
+	AggregatedHostIntegrationStatusFuncInvoked bool
 
 	MDMDataFunc        MDMDataFunc
 	MDMDataFuncInvoked bool
@@ -3321,6 +3331,20 @@ func (s *Service) MacadminsData(ctx context.Context, id uint) (*fleet.MacadminsD
 	s.MacadminsDataFuncInvoked = true
 	s.mu.Unlock()
 	return s.MacadminsDataFunc(ctx, id)
+}
+
+func (s *Service) HostIntegrationStatus(ctx context.Context, hostID uint) ([]*fleet.HostIntegrationStatus, error) {
+	s.mu.Lock()
+	s.HostIntegrationStatusFuncInvoked = true
+	s.mu.Unlock()
+	return s.HostIntegrationStatusFunc(ctx, hostID)
+}
+
+func (s *Service) AggregatedHostIntegrationStatus(ctx context.Context, teamID *uint) ([]*fleet.AggregatedIntegrationStatus, error) {
+	s.mu.Lock()
+	s.AggregatedHostIntegrationStatusFuncInvoked = true
+	s.mu.Unlock()
+	return s.AggregatedHostIntegrationStatusFunc(ctx, teamID)
 }
 
 func (s *Service) MDMData(ctx context.Context, id uint) (*fleet.HostMDM, error) {

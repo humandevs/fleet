@@ -100,6 +100,7 @@ interface IHostsFilterBlockProps {
     scriptBatchScriptName: string | null;
     depProfileError: string; // string "true" as we don't handle booleans
     depAssignProfileResponse?: DEPDeviceStatus;
+    coverageProblems?: boolean;
   };
   selectedLabel?: ILabel;
   isOnlyObserver?: boolean;
@@ -163,6 +164,7 @@ const HostsFilterBlock = ({
     scriptBatchScriptName,
     depProfileError,
     depAssignProfileResponse,
+    coverageProblems,
   },
   selectedLabel,
   isOnlyObserver,
@@ -672,6 +674,24 @@ const HostsFilterBlock = ({
     );
   };
 
+  const renderCoverageProblemsBlock = () => {
+    return (
+      <FilterPill
+        label="Coverage: problem devices"
+        tooltipDescription={
+          <>
+            Hosts with no coverage data at all, or with at least one coverage
+            category (AV, MDR, remote access, backups, disk encryption,
+            patching) that isn&apos;t protected. Stale data counts as unknown.
+          </>
+        }
+        onClear={() =>
+          handleClearFilter([HOSTS_QUERY_PARAMS.COVERAGE_PROBLEMS])
+        }
+      />
+    );
+  };
+
   const showSelectedLabel =
     selectedLabel &&
     selectedLabel.type !== "all" &&
@@ -698,7 +718,8 @@ const HostsFilterBlock = ({
     (configProfileStatus && configProfileUUID && configProfile) ||
     (scriptBatchExecutionStatus && scriptBatchExecutionId) ||
     depProfileError ||
-    depAssignProfileResponse
+    depAssignProfileResponse ||
+    coverageProblems
   ) {
     const renderFilterPill = () => {
       switch (true) {
@@ -776,6 +797,8 @@ const HostsFilterBlock = ({
           return renderDepProfileError();
         case !!depAssignProfileResponse:
           return renderDepAssignProfileResponse();
+        case !!coverageProblems:
+          return renderCoverageProblemsBlock();
         default:
           return null;
       }

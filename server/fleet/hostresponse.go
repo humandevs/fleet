@@ -19,7 +19,11 @@ type HostResponse struct {
 	DisplayName      string       `json:"display_name" csv:"display_name"`
 	Labels           []*Label     `json:"labels,omitempty" csv:"-"`
 	Geolocation      *GeoLocation `json:"geolocation,omitempty" csv:"-"`
-	CSVDeviceMapping string       `json:"-" db:"-" csv:"device_mapping"`
+	// IntegrationStatus (fork/community) holds the host's per-category coverage cells (av / remote_access /
+	// patching / etc., staleness-applied). Populated only when the populate_integration_status query param
+	// is set; powers the per-host coverage grid.
+	IntegrationStatus []*HostIntegrationStatus `json:"integration_status,omitempty" csv:"-"`
+	CSVDeviceMapping  string                   `json:"-" db:"-" csv:"device_mapping"`
 }
 
 // HostResponseForHost returns a HostResponse from Host with Geolocation.

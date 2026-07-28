@@ -354,6 +354,8 @@ func registerPremiumCrons(ctx context.Context, deps cronSchedulesDeps) {
 // registerMiscCrons covers the host vitals label membership schedule and the
 // batch activity completion checker.
 func registerMiscCrons(ctx context.Context, deps cronSchedulesDeps) {
+	registerCommunityCrons(ctx, deps) // community (fork) collector — see cmd/fleet/cron_community.go
+
 	// Start the service that calculates and updates host vitals label membership.
 	deps.register("failed to register host vitals label membership schedule", func() (fleet.CronSchedule, error) {
 		return newHostVitalsLabelMembershipSchedule(ctx, deps.instanceID, deps.ds, deps.logger)

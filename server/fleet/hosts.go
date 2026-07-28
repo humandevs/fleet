@@ -269,11 +269,21 @@ type HostListOptions struct {
 	// PopulateLabels adds the `Labels` array field to all host responses returned
 	PopulateLabels bool
 
+	// PopulateIntegrationStatus (fork/community) adds the `integration_status` array (the host's
+	// per-category coverage cells, with staleness applied) to all host responses returned. Powers the
+	// per-host coverage grid dashboard.
+	PopulateIntegrationStatus bool
+
 	// IncludeDeviceStatus adds the `MDM` field with the `device_status` & `pending_action` sub fields to all hosts returned
 	IncludeDeviceStatus bool
 
 	// VulnerabilityFilter filters the hosts by the presence of a vulnerability (CVE)
 	VulnerabilityFilter *string
+
+	// CoverageFilter (fork/community) filters hosts by third-party integration coverage: "problem devices"
+	// (any non-protected or stale cell), missing categories, or an exact category+state — using the same
+	// freshness-aware matching as the coverage matrix. The zero value applies no coverage filtering.
+	CoverageFilter CoverageFilter
 
 	// ConnectedToFleetFilter filters hosts that have an active MDM
 	// connection with this Fleet instance.

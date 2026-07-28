@@ -474,6 +474,14 @@ type Service interface {
 	DisableAuthForPing(ctx context.Context)
 
 	MacadminsData(ctx context.Context, id uint) (*MacadminsData, error)
+
+	// HostIntegrationStatus returns the community-plugin coverage cells for a host (AV/MDR/remote
+	// access/backups/disk encryption), with stale cells rendered as "unknown". MIT/free feature.
+	HostIntegrationStatus(ctx context.Context, hostID uint) ([]*HostIntegrationStatus, error)
+	// AggregatedHostIntegrationStatus returns a fleet-wide, optionally team-scoped, rollup of
+	// coverage cells grouped by (source, category, state), with cells past their freshness TTL
+	// counted as "unknown". Powers the coverage dashboard tiles. MIT/free feature.
+	AggregatedHostIntegrationStatus(ctx context.Context, teamID *uint) ([]*AggregatedIntegrationStatus, error)
 	MDMData(ctx context.Context, id uint) (*HostMDM, error)
 	AggregatedMacadminsData(ctx context.Context, teamID *uint) (*AggregatedMacadminsData, error)
 	AggregatedMDMData(ctx context.Context, id *uint, platform string) (AggregatedMDMData, error)

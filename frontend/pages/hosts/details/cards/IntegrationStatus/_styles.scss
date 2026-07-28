@@ -1,0 +1,13 @@
+.integration-status-card {
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: $pad-large;
+  }
+
+  &__empty {
+    margin: 0;
+    color: $ui-fleet-black-50;
+    font-style: italic;
+  }
+}

@@ -15,6 +15,7 @@ import {
   HostNameSettingStatus,
 } from "./mdm";
 import { HostPlatform } from "./platform";
+import { IHostIntegrationStatus } from "./integration_status";
 import { IHostCustomVital } from "./custom_host_vitals";
 
 export default PropTypes.shape({
@@ -332,6 +333,9 @@ export interface IHost {
   last_enrolled_at: string;
   last_mdm_enrolled_at: string;
   seen_time: string;
+  // integration_status (fork/community) holds the host's per-category coverage cells; present only when
+  // the hosts list is fetched with populate_integration_status=true. Powers the coverage grid.
+  integration_status?: IHostIntegrationStatus[];
   refetch_requested: boolean;
   refetch_critical_queries_until: string | null;
   hostname: string;

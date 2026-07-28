@@ -98,6 +98,8 @@ export const HOSTS_QUERY_PARAMS = {
   SOFTWARE_STATUS: "software_status",
   SCRIPT_BATCH_EXECUTION_STATUS: "script_batch_execution_status",
   SCRIPT_BATCH_EXECUTION_ID: "script_batch_execution_id",
+  COVERAGE: "coverage",
+  COVERAGE_PROBLEMS: "coverage_problems",
 } as const;
 
 export interface ILoadHostsQueryKey extends ILoadHostsOptions {
@@ -141,6 +143,12 @@ export interface ILoadHostsOptions {
   scriptBatchExecutionId?: string;
   depProfileError?: boolean;
   depAssignProfileResponse?: DEPDeviceStatus;
+  /** Coverage "problem devices" filter: hosts with no coverage cells at all, or any
+   * non-protected/stale cell (community-plugin coverage matrix). */
+  coverageProblems?: boolean;
+  /** Attach each host's per-category coverage cells (integration_status) to the response — powers the
+   * per-host coverage grid. */
+  populateIntegrationStatus?: boolean;
 }
 
 export interface IExportHostsOptions {
@@ -497,6 +505,8 @@ export default {
     scriptBatchExecutionId,
     depProfileError,
     depAssignProfileResponse,
+    coverageProblems,
+    populateIntegrationStatus,
   }: ILoadHostsOptions): Promise<ILoadHostsResponse> => {
     const label = getLabel(selectedLabels);
     const sortParams = getSortParams(sortBy);
@@ -506,6 +516,7 @@ export default {
       per_page: perPage,
       query: globalFilter,
       device_mapping,
+      populate_integration_status: populateIntegrationStatus,
       order_key: sortParams.order_key,
       order_direction: sortParams.order_direction,
       status,
@@ -541,6 +552,7 @@ export default {
         scriptBatchExecutionId,
         depProfileError,
         depAssignProfileResponse,
+        coverageProblems,
       }),
     };
 

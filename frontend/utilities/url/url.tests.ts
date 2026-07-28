@@ -1,8 +1,35 @@
 import {
   buildQueryStringFromParams,
   getPathWithQueryParams,
+  reconcileMutuallyExclusiveHostParams,
   reconcileMutuallyInclusiveHostParams,
 } from ".";
+
+describe("url utilities > reconcileMutuallyExclusiveHostParams (coverage)", () => {
+  it("emits coverage_problems=true for the coverageProblems filter", () => {
+    expect(reconcileMutuallyExclusiveHostParams({ coverageProblems: true })).toEqual(
+      { coverage_problems: true }
+    );
+  });
+
+  it("drops coverageProblems when a higher-precedence filter is present", () => {
+    // coverageProblems is the last case in the mutually-exclusive switch, so any other active filter
+    // must win — otherwise the dashboard drill-down would silently list the wrong hosts.
+    expect(
+      reconcileMutuallyExclusiveHostParams({
+        policyId: 1,
+        policyResponse: "passing",
+        coverageProblems: true,
+      })
+    ).toEqual({ policy_id: 1, policy_response: "passing" });
+  });
+
+  it("returns {} when coverageProblems is falsy", () => {
+    expect(reconcileMutuallyExclusiveHostParams({ coverageProblems: false })).toEqual(
+      {}
+    );
+  });
+});
 
 describe("url utilites > buildQueryStringFromParams", () => {
   it("creates a query string from a params object", () => {

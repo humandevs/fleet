@@ -18,6 +18,7 @@ import hostAPI, {
   IGetHostCertificatesResponse,
   IGetHostCertsApiParams,
 } from "services/entities/hosts";
+import hostIntegrationStatusAPI from "services/entities/host_integration_status";
 import teamAPI, { ILoadTeamsResponse } from "services/entities/teams";
 import commandAPI from "services/entities/command";
 
@@ -113,6 +114,7 @@ import ActivityCard from "../cards/Activity";
 import AgentOptionsCard from "../cards/AgentOptions";
 import LabelsCard from "../cards/Labels";
 import MunkiIssuesCard from "../cards/MunkiIssues";
+import IntegrationStatusCard from "../cards/IntegrationStatus";
 import SoftwareInventoryCard from "../cards/Software";
 import SoftwareLibraryCard from "../cards/HostSoftwareLibrary";
 import LocalUserAccountsCard from "../cards/LocalUserAccounts";
@@ -364,6 +366,20 @@ const HostDetailsPage = ({
       enabled: !!hostIdFromURL, // TODO(android): disable for unsupported platforms?
       retry: false,
       select: (data: IMacadminsResponse) => data.macadmins,
+    }
+  );
+
+  // Community-plugin coverage cells (AV/MDR/patching/remote access/backups/disk encryption).
+  const {
+    data: integrationStatus,
+    isLoading: isLoadingIntegrationStatus,
+  } = useQuery(
+    ["integrationStatus", hostIdFromURL],
+    () => hostIntegrationStatusAPI.getIntegrationStatus(hostIdFromURL),
+    {
+      enabled: !!hostIdFromURL,
+      retry: false,
+      select: (data) => data.integration_status,
     }
   );
 
@@ -1540,6 +1556,14 @@ const HostDetailsPage = ({
                       : undefined
                   }
                 />
+                {(isLoadingIntegrationStatus ||
+                  (integrationStatus && integrationStatus.length > 0)) && (
+                  <IntegrationStatusCard
+                    className={fullWidthCardClass}
+                    isLoading={isLoadingIntegrationStatus}
+                    data={integrationStatus}
+                  />
+                )}
                 <ActivityCard
                   className={
                     showAgentOptionsCard

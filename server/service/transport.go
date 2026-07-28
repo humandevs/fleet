@@ -534,6 +534,42 @@ func hostListOptionsFromRequest(r *http.Request) (fleet.HostListOptions, error) 
 		hopt.LowDiskSpaceFilter = &v
 	}
 
+	// Coverage filters (fork/community): the "problem devices" view and coverage drill-downs, matching the
+	// coverage matrix. e.g. coverage_problems=1, coverage_missing=av,mdr, or coverage_category=av&coverage_state=at_risk.
+	if problems := r.URL.Query().Get("coverage_problems"); problems != "" {
+		v, err := strconv.ParseBool(problems)
+		if err != nil {
+			return hopt, ctxerr.Wrap(r.Context(), badRequest(fmt.Sprintf("Invalid coverage_problems: %s", problems)))
+		}
+		hopt.CoverageFilter.Problems = v
+	}
+	if missing := r.URL.Query().Get("coverage_missing"); missing != "" {
+		for _, c := range strings.Split(missing, ",") {
+			if c = strings.TrimSpace(c); c != "" {
+				category := fleet.IntegrationCategory(c)
+				// Reject unknown categories: an unvalidated value is both a silent false-positive (a typo
+				// matches every host) and a query-DoS vector (one correlated NOT-EXISTS subquery per value).
+				if !category.IsValid() {
+					return hopt, ctxerr.Wrap(r.Context(), badRequest(fmt.Sprintf("Invalid coverage_missing category: %s", c)))
+				}
+				hopt.CoverageFilter.MissingCategories = append(hopt.CoverageFilter.MissingCategories, category)
+			}
+		}
+	}
+	if cat, state := r.URL.Query().Get("coverage_category"), r.URL.Query().Get("coverage_state"); cat != "" && state != "" {
+		category, coverageState := fleet.IntegrationCategory(cat), fleet.IntegrationState(state)
+		if !category.IsValid() {
+			return hopt, ctxerr.Wrap(r.Context(), badRequest(fmt.Sprintf("Invalid coverage_category: %s", cat)))
+		}
+		if !coverageState.IsValid() {
+			return hopt, ctxerr.Wrap(r.Context(), badRequest(fmt.Sprintf("Invalid coverage_state: %s", state)))
+		}
+		hopt.CoverageFilter.StatePredicates = append(hopt.CoverageFilter.StatePredicates, fleet.CoverageStatePredicate{
+			Category: category,
+			State:    coverageState,
+		})
+	}
+
 	batchScriptExecutionID := r.URL.Query().Get("script_batch_execution_id")
 	if batchScriptExecutionID != "" {
 		hopt.BatchScriptExecutionIDFilter = &batchScriptExecutionID
@@ -592,6 +628,17 @@ func hostListOptionsFromRequest(r *http.Request) (fleet.HostListOptions, error) 
 			)
 		}
 		hopt.PopulateLabels = pl
+	}
+
+	populateIntegrationStatus := r.URL.Query().Get("populate_integration_status")
+	if populateIntegrationStatus != "" {
+		pis, err := strconv.ParseBool(populateIntegrationStatus)
+		if err != nil {
+			return hopt, ctxerr.Wrap(
+				r.Context(), badRequest(fmt.Sprintf("Invalid boolean parameter populate_integration_status: %s", populateIntegrationStatus)),
+			)
+		}
+		hopt.PopulateIntegrationStatus = pis
 	}
 
 	includeDeviceStatus := r.URL.Query().Get("include_device_status")

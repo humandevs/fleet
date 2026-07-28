@@ -3,6 +3,7 @@ import React from "react";
 import { LOW_DISK_SPACE_GB } from "pages/DashboardPage/helpers";
 
 import { PlatformValueOptions } from "utilities/constants";
+import CoverageProblemsHosts from "../../cards/CoverageProblemsHosts";
 import LowDiskSpaceHosts from "../../cards/LowDiskSpaceHosts";
 import MissingHosts from "../../cards/MissingHosts";
 import TotalHosts from "../../cards/TotalHosts";
@@ -18,6 +19,8 @@ interface IPlatformHostCountsProps {
   missingCount: number;
   lowDiskSpaceCount: number;
   abmIssueCount: number;
+  /** undefined hides the coverage tile (no community providers reporting). */
+  coverageProblemsCount?: number;
   selectedPlatformLabelId?: number;
 }
 
@@ -29,6 +32,7 @@ const MetricsHostCounts = ({
   missingCount,
   lowDiskSpaceCount,
   abmIssueCount,
+  coverageProblemsCount,
   selectedPlatformLabelId,
 }: IPlatformHostCountsProps): JSX.Element => {
   const TotalHostsCard = (
@@ -57,6 +61,18 @@ const MetricsHostCounts = ({
     />
   );
 
+  // Renders only when the community coverage collector is reporting (count is undefined
+  // otherwise); MIT/free feature, so not premium-gated. The count is not platform-filtered, so
+  // the tile only shows on the "all platforms" view.
+  const CoverageProblemsHostsCard =
+    coverageProblemsCount !== undefined && selectedPlatform === "all" ? (
+      <CoverageProblemsHosts
+        coverageProblemsCount={coverageProblemsCount}
+        selectedPlatformLabelId={selectedPlatformLabelId}
+        currentTeamId={currentTeamId}
+      />
+    ) : null;
+
   // Does not render if abmIssueCount is 0 or undefined (e.g. on non-Apple platforms views)
   // Currently all undefined is defaulted to 0 upstream
   const ABMIssueHostsCard = abmIssueCount ? (
@@ -75,6 +91,7 @@ const MetricsHostCounts = ({
   return (
     <div className={baseClass}>
       {selectedPlatform === "all" && TotalHostsCard}
+      {CoverageProblemsHostsCard}
       {showMissingAndLowDiskHosts && MissingHostsCard}
       {/* Low disk space is Premium-only: `low_disk_space_count` is null for
           non-Premium callers and the linked filter is Premium-gated. */}

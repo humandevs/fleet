@@ -58,6 +58,9 @@ export interface IHostCountLoadOptions {
   configProfileUUID?: string;
   scriptBatchExecutionStatus?: string;
   scriptBatchExecutionId?: string;
+  /** Coverage "problem devices" filter: hosts with no coverage cells at all, or any
+   * non-protected/stale cell (community-plugin coverage matrix). */
+  coverageProblems?: boolean;
 }
 
 export default {
@@ -91,6 +94,7 @@ export default {
     const configProfileUUID = options?.configProfileUUID;
     const scriptBatchExecutionStatus = options?.scriptBatchExecutionStatus;
     const scriptBatchExecutionId = options?.scriptBatchExecutionId;
+    const coverageProblems = options?.coverageProblems;
 
     const queryParams = {
       query: globalFilter,
@@ -125,6 +129,7 @@ export default {
         configProfileUUID,
         scriptBatchExecutionStatus,
         scriptBatchExecutionId,
+        coverageProblems,
       }),
       label_id: label,
       status,

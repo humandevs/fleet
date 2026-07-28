@@ -1,0 +1,14 @@
+- Removed the redundant, unscoped `GET /api/latest/fleet/hosts/coverage` endpoint. Coverage-filtered
+  host lists are served by the team-scoped `GET /api/latest/fleet/hosts?coverage_problems=1` path; the
+  removed endpoint returned host IDs across all teams to any team-scoped user.
+- Made the community coverage-matrix freshness TTLs a single source of truth (`fleet.IntegrationStaleTTL`),
+  so the SQL freshness gate and the read-path staleness gate can no longer drift.
+- Validated the `coverage_missing`, `coverage_category`, and `coverage_state` host-list params against the
+  known coverage categories/states, returning 400 on unknown values instead of matching every host.
+- Community coverage collector no longer takes the whole server down when misconfigured: a bad provider
+  config now disables only the collector (logged) instead of aborting server boot.
+- Community providers are hardened against unresponsive/oversized/paginated vendor responses: per-endpoint
+  failures no longer abort a whole sweep (Bitdefender), list endpoints paginate fully (Action1/Bitdefender),
+  responses are size-capped, and empty-tenant responses no longer error (Splashtop).
+- Vendor hosts reported by FQDN now match Fleet hosts stored by short hostname, and a run where no vendor
+  host matches any Fleet host is surfaced (instead of the coverage column silently showing all-unknown).
